@@ -1,0 +1,6 @@
+pydantic>=2.12
+fastapi>=0.139
+uvicorn[standard]>=0.50
+anthropic>=0.116
+google-genai>=2.10
+supabase>=2.10

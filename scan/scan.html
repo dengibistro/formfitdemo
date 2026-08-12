@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FormFit — Body scan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* Design tokens lifted from the user's earlier Lovable/Vercel prototype
+     (form-fit-roan.vercel.app) — real HSL values extracted from its
+     shipped CSS, not guessed/approximated. */
+  :root {
+    color-scheme: light;
+    --background: 0 0% 100%;
+    --foreground: 220 13% 18%;
+    --card: 220 14% 96%;
+    --card-elevated: 220 14% 93%;
+    --primary: 217 91% 60%;
+    --primary-dark: 217 91% 52%;
+    --primary-glow: 217 91% 70%;
+    --muted-foreground: 220 9% 46%;
+    --border: 220 13% 91%;
+    --destructive: 0 84% 60%;
+    --radius: 1rem;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    margin: 0; background: hsl(var(--background)); color: hsl(var(--foreground));
+    min-height: 100vh; display: flex; justify-content: center;
+  }
+  .app { width: 100%; max-width: 480px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  h1 {
+    font-family: "Barlow Condensed", Inter, sans-serif;
+    font-size: 30px; font-weight: 700; letter-spacing: 0.01em; margin: 0 0 4px;
+    text-transform: uppercase; color: hsl(var(--foreground));
+  }
+  p { line-height: 1.5; color: hsl(var(--muted-foreground)); margin: 0; }
+  .screen { display: flex; flex-direction: column; gap: 16px; }
+  .card {
+    background: hsl(var(--card)); border-radius: var(--radius); padding: 16px;
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 2px 12px -4px hsl(231 80% 30% / .12);
+  }
+  .privacy-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .privacy-item { display: flex; gap: 10px; align-items: flex-start; }
+  .privacy-item .icon { font-size: 18px; line-height: 1.4; }
+  label.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: hsl(var(--foreground)); font-weight: 500; }
+  input[type="number"], input[type="text"], select {
+    background: hsl(0 0% 100%); border: 1px solid hsl(var(--border)); color: hsl(var(--foreground));
+    border-radius: calc(var(--radius) - 6px); padding: 10px 12px; font-size: 16px; font-family: inherit;
+  }
+  button {
+    font-family: inherit; font-size: 16px; font-weight: 700; padding: 14px 18px;
+    border-radius: calc(var(--radius) - 6px); border: none; cursor: pointer;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)));
+    color: white; box-shadow: 0 8px 24px -8px hsl(var(--primary) / .4);
+  }
+  button:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+  button.secondary { background: none; box-shadow: none; color: hsl(var(--muted-foreground)); font-weight: 500; font-size: 14px; padding: 8px; }
+  .video-box { position: relative; width: 100%; border-radius: var(--radius); overflow: hidden; background: #000; }
+  video { width: 100%; display: block; }
+  canvas#overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  .progress { font-size: 13px; color: hsl(var(--muted-foreground)); letter-spacing: 0.04em; text-transform: uppercase; font-weight: 600; }
+  .pose-title { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 24px; font-weight: 700; margin-top: 2px; text-transform: uppercase; }
+  .pose-body { font-size: 14px; color: hsl(var(--muted-foreground)); margin-top: 4px; }
+  .status-banner {
+    text-align: center; font-size: 15px; font-weight: 600; padding: 12px;
+    border-radius: calc(var(--radius) - 6px); background: hsl(var(--card-elevated)); color: hsl(var(--foreground));
+    border: 1px solid hsl(var(--border)); transition: background 0.2s;
+  }
+  .status-banner.ready { background: hsl(217 91% 95%); color: hsl(var(--primary-dark)); border-color: hsl(217 91% 85%); }
+  #introError.status-banner, #nameError.status-banner, #measurementError.status-banner {
+    background: hsl(0 84% 97%); color: hsl(var(--destructive)); border-color: hsl(0 84% 90%);
+  }
+  .countdown-number {
+    font-family: "Barlow Condensed", Inter, sans-serif;
+    font-size: 48px; font-weight: 700; display: block; line-height: 1;
+    margin-bottom: 2px; color: hsl(var(--primary-dark));
+  }
+  .fallback-link { text-align: center; }
+  .fallback-link button { background: none; border: none; color: hsl(var(--muted-foreground)); font-size: 13px; text-decoration: underline; padding: 4px; box-shadow: none; font-weight: 500; }
+  .debug-toggle { text-align: right; }
+  .debug-toggle button { background: none; color: hsl(var(--border)); font-size: 11px; padding: 2px; box-shadow: none; }
+  #debugPanel {
+    display: none; font-size: 11px; font-family: ui-monospace, monospace; color: #7fe0a0;
+    background: #14141c; padding: 8px; border-radius: 8px; white-space: pre-wrap;
+  }
+  #debugPanel.open { display: block; }
+  .measurement-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .measurement-row .measurement-label { font-size: 14px; color: hsl(var(--foreground)); font-weight: 500; }
+  .measurement-row .measurement-note { font-size: 12px; color: hsl(var(--muted-foreground)); display: block; margin-top: 2px; }
+  .measurement-row input[type="number"] { width: 90px; text-align: right; }
+  .measurement-unit { font-size: 13px; color: hsl(var(--muted-foreground)); margin-left: 6px; }
+  [hidden] { display: none !important; }
+
+  /* Zone 3: completion celebration screen */
+  .celebrate-check {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)));
+    color: white; font-size: 36px; display: flex; align-items: center;
+    justify-content: center; margin: 12px auto 0;
+    box-shadow: 0 8px 24px -8px hsl(var(--primary) / .4);
+    animation: pop-in 0.4s ease-out;
+  }
+  @keyframes pop-in {
+    0% { transform: scale(0); opacity: 0; }
+    70% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+  #screenCelebrate h1 { text-align: center; }
+  .celebrate-row {
+    display: flex; justify-content: space-between; font-size: 15px;
+    opacity: 0; animation: row-in 0.4s ease-out forwards;
+  }
+  .celebrate-row .celebrate-label { color: hsl(var(--muted-foreground)); }
+  .celebrate-row .celebrate-value { font-weight: 700; color: hsl(var(--foreground)); }
+  @keyframes row-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>FormFit body scan</h1>
+
+  <!-- Screen 1: privacy explanation + camera permission priming -->
+  <section id="screenIntro" class="screen">
+    <p>We'll take you through three quick poses to work out your body's
+    measurements, so we can set up gym machines to fit you exactly.</p>
+
+    <div class="card privacy-list">
+      <div class="privacy-item"><span class="icon">🔒</span>
+        <p>Everything happens on your own device. Your camera feed is never
+        recorded or uploaded — only the final measurements are sent.</p></div>
+      <div class="privacy-item"><span class="icon">📏</span>
+        <p>Form-fitting clothing gives a more accurate result than loose
+        clothing.</p></div>
+      <div class="privacy-item"><span class="icon">📶</span>
+        <p>You'll need to grant camera access on the next step.</p></div>
+    </div>
+
+    <label class="field">Your height (cm)
+      <input id="heightCm" type="number" value="178" min="100" max="230" />
+    </label>
+
+    <label class="field">Camera
+      <select id="facingMode">
+        <option value="environment">Rear (recommended — more accurate)</option>
+        <option value="user">Front</option>
+      </select>
+    </label>
+
+    <button id="startBtn">Enable camera &amp; start scan</button>
+    <div id="introError" class="status-banner" hidden></div>
+  </section>
+
+  <!-- Screen 2: capture flow (Zones 1-4 wired together) -->
+  <section id="screenCapture" class="screen" hidden>
+    <div class="progress" id="flowProgress"></div>
+    <div class="pose-title" id="flowTitle"></div>
+    <p class="pose-body" id="flowBody"></p>
+
+    <div class="video-box">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <div id="status" class="status-banner">Starting camera…</div>
+
+    <div class="fallback-link">
+      <button id="captureBtn" class="secondary" disabled>Not working? Tap to capture now</button>
+    </div>
+
+    <div class="debug-toggle"><button id="debugToggleBtn" type="button">debug</button></div>
+    <div id="debugPanel">
+      <div id="debugRatio"></div>
+      <label class="field" style="margin-top: 8px;">Redo an already-captured pose
+        <select id="redoSelect"><option value="">(none captured yet)</option></select>
+      </label>
+      <button id="redoBtn" class="secondary" disabled>Redo selected pose</button>
+      <div id="captureLog"></div>
+    </div>
+  </section>
+
+  <!-- Screen 3: confirmation/correction — computed automatically once all
+       three poses are in; every value is editable in case something looks
+       off. Confirm sends it to the FormFit API's POST /profiles (Zone 7). -->
+  <section id="screenDone" class="screen" hidden>
+    <h1>Check your measurements</h1>
+    <p>Here's what we measured. If anything looks off, adjust it below
+    before confirming.</p>
+    <div id="measurementError" class="status-banner" hidden></div>
+    <div id="measurementFields" class="card" style="display: flex; flex-direction: column; gap: 12px;"></div>
+
+    <label class="field"><span id="userIdLabelText">Your name (used as your profile ID)</span>
+      <input id="userIdInput" type="text" placeholder="e.g. yaroslav" />
+    </label>
+    <label class="field">API server address
+      <input id="apiBaseUrlInput" type="text" />
+    </label>
+
+    <button id="confirmBtn">Confirm &amp; save measurements</button>
+    <div class="fallback-link"><button id="recomputeBtn" class="secondary" type="button">Recompute from captures</button></div>
+  </section>
+
+  <!-- Screen 4: completion celebration — shown right after a successful
+       save, then auto-redirects into the chat product (Phase 2). Not a
+       dead end: closes the gap the earlier "raw JSON and nothing else"
+       placeholder left. -->
+  <section id="screenCelebrate" class="screen" hidden>
+    <div class="celebrate-check">&#10003;</div>
+    <h1>You're all set</h1>
+    <div id="celebrateStats" class="card" style="display: flex; flex-direction: column; gap: 10px;"></div>
+    <p style="text-align: center;">Taking you to your setup assistant…</p>
+  </section>
+</div>
+
+<script type="module">
+import { POSE_LANDMARK, computeCalibrationFactor, computeFrontMeasurementsMm, computeSittingHeightMm, computeChestDepthMm } from "./measurements.mjs";
+import { evaluateCaptureQuality, averageLandmarksOverWindow, estimateFacingRotationRatio, estimateProfileVisibilityAsymmetry, estimateFramingIssue } from "./quality_gates.mjs";
+import { detectPoseInVideoFrame, maskToPlainData, estimateAverageLuminance, startCamera, stopCamera } from "./mediapipe_runner.mjs";
+import { createCaptureFlow, currentPoseKind, isFlowComplete, progressText, currentInstructions, advanceAfterCapture, requestRedo } from "./capture_flow.mjs";
+import { PoseLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs";
+
+const screenIntro = document.getElementById("screenIntro");
+const screenCapture = document.getElementById("screenCapture");
+const screenDone = document.getElementById("screenDone");
+const introError = document.getElementById("introError");
+const heightCmInput = document.getElementById("heightCm");
+const startBtn = document.getElementById("startBtn");
+
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const ctx = overlay.getContext("2d");
+const statusEl = document.getElementById("status");
+const debugRatioEl = document.getElementById("debugRatio");
+const captureBtn = document.getElementById("captureBtn");
+const redoSelect = document.getElementById("redoSelect");
+const redoBtn = document.getElementById("redoBtn");
+const captureLog = document.getElementById("captureLog");
+const flowProgressEl = document.getElementById("flowProgress");
+const flowTitleEl = document.getElementById("flowTitle");
+const flowBodyEl = document.getElementById("flowBody");
+const debugToggleBtn = document.getElementById("debugToggleBtn");
+const debugPanel = document.getElementById("debugPanel");
+const confirmBtn = document.getElementById("confirmBtn");
+const recomputeBtn = document.getElementById("recomputeBtn");
+const measurementFields = document.getElementById("measurementFields");
+const measurementError = document.getElementById("measurementError");
+const userIdLabelText = document.getElementById("userIdLabelText");
+const userIdInput = document.getElementById("userIdInput");
+const apiBaseUrlInput = document.getElementById("apiBaseUrlInput");
+const screenCelebrate = document.getElementById("screenCelebrate");
+const celebrateStats = document.getElementById("celebrateStats");
+
+// api.py now serves this very page (mounted at /scan — see api.py's
+// StaticFiles mount), so same-origin is the right default whether we're
+// reached via localhost or an ngrok tunnel. Still editable in case this
+// file is ever served from somewhere else (e.g. a plain static server).
+apiBaseUrlInput.value = window.location.origin;
+
+// Phase 2: when the future frontend.html FormFit entry flow (Zone 5) hands
+// off to this page, it passes the already-decided name via ?user_id= —
+// this page no longer needs to ask a second time. Falls back to the
+// original manual-entry field when opened directly (e.g. our own testing
+// via test_harness.html-style workflows, or scan.html on its own).
+const handoffUserId = new URLSearchParams(window.location.search).get("user_id");
+if (handoffUserId) {
+  userIdInput.value = handoffUserId;
+  userIdInput.readOnly = true;
+  userIdLabelText.textContent = `Continuing as ${handoffUserId}`;
+}
+
+// Debug panel (raw ratios/visibility/framing numbers, redo picker) stays
+// hidden by default for real users — same diagnostics that made the real-
+// device rotation/framing bugs tractable during Zones 1-4, kept around for
+// us, not for the product. Toggled, never shown by default.
+debugToggleBtn.addEventListener("click", () => debugPanel.classList.toggle("open"));
+
+let flow = createCaptureFlow();
+
+function renderFlow() {
+  flowProgressEl.textContent = `Step ${progressText(flow)}`;
+  if (isFlowComplete(flow)) {
+    flowTitleEl.textContent = "All three poses captured";
+    flowBodyEl.textContent = "";
+  } else {
+    const instructions = currentInstructions(flow);
+    flowTitleEl.textContent = instructions.title;
+    flowBodyEl.textContent = instructions.body;
+  }
+  redoSelect.innerHTML = "";
+  if (flow.completedPoseKinds.size === 0) {
+    redoSelect.appendChild(new Option("(none captured yet)", ""));
+    redoBtn.disabled = true;
+  } else {
+    redoSelect.appendChild(new Option("Choose a pose to redo...", ""));
+    for (const poseKind of flow.completedPoseKinds) {
+      redoSelect.appendChild(new Option(poseKind, poseKind));
+    }
+    redoBtn.disabled = false;
+  }
+}
+renderFlow();
+
+const RECENT_FRAMES_WINDOW = 15; // ~0.5-1s at typical webcam framerates — jitter/stability check only
+let recentLandmarkFrames = [];
+let recentWorldFrames = [];
+let latestDetection = null;
+let cameraStream = null;
+
+// Longer-lived accumulation for the actual capture average: every frame
+// collected during the entire ready streak (the full COUNTDOWN_MS hold),
+// not just the short jitter window above. See PRODUCT_ROADMAP_NOTES.md's
+// "Averaging window widened" section.
+let heldLandmarkFrames = [];
+let heldWorldFrames = [];
+
+const captures = { front: null, side_standing: null, side_seated: null };
+
+const COUNTDOWN_MS = 3000;
+const READY_GRACE_MS = 400;
+let readySinceMs = null;
+let lastReadyMs = null;
+let lastCountdownBeepSecond = null;
+
+let audioCtx = null;
+function beep(freq, durationMs) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.frequency.value = freq;
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+  osc.start();
+  osc.stop(audioCtx.currentTime + durationMs / 1000);
+}
+
+function diagnosticsText(landmarks, poseKind) {
+  const L = POSE_LANDMARK;
+  const ratio = estimateFacingRotationRatio(landmarks);
+  const asymmetry = estimateProfileVisibilityAsymmetry(landmarks);
+  const ls = landmarks[L.LEFT_SHOULDER].visibility;
+  const rs = landmarks[L.RIGHT_SHOULDER].visibility;
+  const lh = landmarks[L.LEFT_HIP].visibility;
+  const rh = landmarks[L.RIGHT_HIP].visibility;
+  const hipMidY = (landmarks[L.LEFT_HIP].y + landmarks[L.RIGHT_HIP].y) / 2;
+  const noseHipExtent = Math.abs(hipMidY - landmarks[L.NOSE].y);
+  const heelMidY = Math.max(landmarks[L.LEFT_HEEL].y, landmarks[L.RIGHT_HEEL].y);
+  const noseHeelExtent = Math.abs(heelMidY - landmarks[L.NOSE].y);
+  const framingCode = estimateFramingIssue(landmarks, poseKind) || "ok";
+  return `ratio=${ratio.toFixed(3)} asymmetry=${asymmetry.toFixed(3)} | shoulder vis L=${ls.toFixed(2)} R=${rs.toFixed(2)} | hip vis L=${lh.toFixed(2)} R=${rh.toFixed(2)} | framing=${framingCode} noseHipExt=${noseHipExtent.toFixed(3)} noseHeelExt=${noseHeelExtent.toFixed(3)}`;
+}
+
+function showDoneScreenIfComplete() {
+  if (isFlowComplete(flow)) {
+    screenCapture.hidden = true;
+    screenDone.hidden = false;
+    tryComputeAndRender();
+  }
+}
+
+function performCapture(poseKind, detection, framesWindow, worldFramesWindow) {
+  const averagedLandmarks = averageLandmarksOverWindow(framesWindow);
+  const averagedWorld = averageLandmarksOverWindow(worldFramesWindow);
+  const entry = { landmarks: averagedLandmarks, worldLandmarks: averagedWorld };
+  if (poseKind === "side_standing" && detection.segmentationMask) {
+    entry.maskData = maskToPlainData(detection.segmentationMask);
+  }
+  captures[poseKind] = entry;
+  flow = advanceAfterCapture(flow, poseKind);
+  renderFlow();
+  captureLog.textContent = `Captured: ${poseKind} (averaged over ${framesWindow.length} frames)\n${diagnosticsText(detection.landmarks, poseKind)}`;
+  beep(1320, 200);
+  showDoneScreenIfComplete();
+}
+
+startBtn.addEventListener("click", async () => {
+  introError.hidden = true;
+  startBtn.disabled = true;
+  startBtn.textContent = "Requesting camera…";
+  try {
+    // Must be created/resumed from a user gesture (this click) — browsers
+    // block audio otherwise, and the countdown beeps fire later from
+    // inside the detection loop, which isn't itself a user gesture.
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+
+    // Rear camera is pre-selected as the recommended default (more
+    // accurate framing for a full-body shot), but the user can pick front
+    // instead on the intro screen — no hidden adaptive fallback prompt.
+    const facingMode = document.getElementById("facingMode").value;
+    cameraStream = await startCamera(video, facingMode);
+    overlay.width = video.videoWidth || 1280;
+    overlay.height = video.videoHeight || 720;
+
+    screenIntro.hidden = true;
+    screenCapture.hidden = false;
+    captureBtn.disabled = false;
+    requestAnimationFrame(loop);
+  } catch (err) {
+    startBtn.disabled = false;
+    startBtn.textContent = "Enable camera & start scan";
+    introError.hidden = false;
+    introError.textContent = `Couldn't access the camera: ${err.message}. Check your browser's camera permission and try again.`;
+  }
+});
+
+function drawSkeleton(landmarks) {
+  // Hidden by default in the product UI (canvas stays but is never drawn
+  // to unless the debug panel is open) — real users don't need to see
+  // the raw landmark skeleton, just the friendly status banner.
+  if (!debugPanel.classList.contains("open")) {
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    return;
+  }
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  ctx.strokeStyle = "#0f0";
+  ctx.lineWidth = 2;
+  for (const conn of PoseLandmarker.POSE_CONNECTIONS) {
+    const a = landmarks[conn.start];
+    const b = landmarks[conn.end];
+    ctx.beginPath();
+    ctx.moveTo(a.x * overlay.width, a.y * overlay.height);
+    ctx.lineTo(b.x * overlay.width, b.y * overlay.height);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#f00";
+  for (const lm of landmarks) {
+    ctx.beginPath();
+    ctx.arc(lm.x * overlay.width, lm.y * overlay.height, 3, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+}
+
+function setStatus(text, ready) {
+  statusEl.textContent = text;
+  statusEl.classList.toggle("ready", !!ready);
+}
+
+async function loop(timestampMs) {
+  if (!cameraStream) return;
+  const detection = await detectPoseInVideoFrame(video, timestampMs);
+
+  if (!detection) {
+    setStatus("We can't see you — step into frame", false);
+    latestDetection = null;
+  } else {
+    latestDetection = detection;
+    drawSkeleton(detection.landmarks);
+
+    recentLandmarkFrames.push(detection.landmarks);
+    recentWorldFrames.push(detection.worldLandmarks);
+    if (recentLandmarkFrames.length > RECENT_FRAMES_WINDOW) recentLandmarkFrames.shift();
+    if (recentWorldFrames.length > RECENT_FRAMES_WINDOW) recentWorldFrames.shift();
+
+    const poseKind = currentPoseKind(flow);
+    if (poseKind === null) {
+      showDoneScreenIfComplete();
+      requestAnimationFrame(loop);
+      return;
+    }
+    const quality = evaluateCaptureQuality({
+      landmarks: detection.landmarks,
+      averageLuminance01: estimateAverageLuminance(video),
+      poseKind,
+      recentFramesLandmarks: recentLandmarkFrames,
+    });
+
+    debugRatioEl.textContent = `${diagnosticsText(detection.landmarks, poseKind)} | pose: ${poseKind}`;
+
+    const enoughFrames = recentLandmarkFrames.length >= RECENT_FRAMES_WINDOW;
+    if (quality.ready && enoughFrames) {
+      lastReadyMs = timestampMs;
+      if (readySinceMs === null) {
+        readySinceMs = timestampMs;
+        lastCountdownBeepSecond = null;
+        heldLandmarkFrames = [];
+        heldWorldFrames = [];
+      }
+      heldLandmarkFrames.push(detection.landmarks);
+      heldWorldFrames.push(detection.worldLandmarks);
+      const elapsed = timestampMs - readySinceMs;
+      if (elapsed < COUNTDOWN_MS) {
+        const secondsLeft = Math.ceil((COUNTDOWN_MS - elapsed) / 1000);
+        if (secondsLeft !== lastCountdownBeepSecond) {
+          lastCountdownBeepSecond = secondsLeft;
+          beep(660, 100);
+        }
+        statusEl.innerHTML = `<span class="countdown-number">${secondsLeft}</span>Hold still…`;
+        statusEl.classList.add("ready");
+      } else {
+        performCapture(poseKind, detection, heldLandmarkFrames.slice(), heldWorldFrames.slice());
+        readySinceMs = null;
+        heldLandmarkFrames = [];
+        heldWorldFrames = [];
+        setStatus("Captured! Moving to the next pose…", true);
+      }
+    } else if (readySinceMs !== null && lastReadyMs !== null && timestampMs - lastReadyMs <= READY_GRACE_MS) {
+      setStatus("Hold still…", true);
+    } else {
+      readySinceMs = null;
+      lastReadyMs = null;
+      lastCountdownBeepSecond = null;
+      heldLandmarkFrames = [];
+      heldWorldFrames = [];
+      setStatus(quality.message || "Getting ready…", false);
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+captureBtn.addEventListener("click", () => {
+  const poseKind = currentPoseKind(flow);
+  if (!poseKind) return;
+  if (!latestDetection || recentLandmarkFrames.length < RECENT_FRAMES_WINDOW) {
+    captureLog.textContent = "Not enough stable frames yet — wait a moment.";
+    return;
+  }
+  performCapture(poseKind, latestDetection, recentLandmarkFrames.slice(), recentWorldFrames.slice());
+});
+
+redoBtn.addEventListener("click", () => {
+  const poseKind = redoSelect.value;
+  if (!poseKind) return;
+  flow = requestRedo(flow, poseKind);
+  captures[poseKind] = null;
+  readySinceMs = null;
+  heldLandmarkFrames = [];
+  heldWorldFrames = [];
+  captureLog.textContent = `Redo — ${poseKind} can be captured again.`;
+  renderFlow();
+  screenDone.hidden = true;
+  screenCapture.hidden = false;
+});
+
+// Zone 6: confirmation/correction. Friendly label + note (if any) per raw
+// measurement key — note is only used for Cd, the one measurement this
+// project's own docs flag as inherently lower-confidence (mask-width
+// technique, not a clean joint-to-joint distance like the rest).
+const MEASUREMENT_FIELDS = [
+  { key: "femur_L_mm", label: "Left thigh" },
+  { key: "femur_R_mm", label: "Right thigh" },
+  { key: "tibia_L_mm", label: "Left shin" },
+  { key: "tibia_R_mm", label: "Right shin" },
+  { key: "arm_L_mm", label: "Left arm" },
+  { key: "arm_R_mm", label: "Right arm" },
+  { key: "biacromial_width_mm", label: "Shoulder width" },
+  { key: "sitting_height_T_mm", label: "Sitting height (seat reference)" },
+  { key: "chest_depth_Cd_mm", label: "Chest depth", note: "Lower-confidence estimate — worth double-checking" },
+];
+
+let measurementInputs = {};
+
+function computeMeasurements() {
+  if (!captures.front) throw new Error("front-standing not captured yet");
+  if (!captures.side_seated) throw new Error("side-seated not captured yet");
+  if (!captures.side_standing || !captures.side_standing.maskData) throw new Error("side-standing not captured yet");
+
+  const heightMm = Number(heightCmInput.value) * 10;
+  const calibrationFactor = computeCalibrationFactor(captures.front.worldLandmarks, heightMm);
+  const front = computeFrontMeasurementsMm(captures.front.worldLandmarks, calibrationFactor);
+  const result = { calibrationFactor, height_H_mm: heightMm, ...front };
+
+  result.sitting_height_T_mm = computeSittingHeightMm(captures.side_seated.worldLandmarks, calibrationFactor);
+  result.chest_depth_Cd_mm = computeChestDepthMm(
+    {
+      worldLandmarks: captures.side_standing.worldLandmarks,
+      normalizedLandmarks: captures.side_standing.landmarks,
+      ...captures.side_standing.maskData,
+    },
+    calibrationFactor,
+  );
+  return result;
+}
+
+function renderMeasurementFields(result) {
+  measurementFields.innerHTML = "";
+  measurementInputs = {};
+  for (const field of MEASUREMENT_FIELDS) {
+    const row = document.createElement("div");
+    row.className = "measurement-row";
+
+    const labelWrap = document.createElement("div");
+    const labelEl = document.createElement("span");
+    labelEl.className = "measurement-label";
+    labelEl.textContent = field.label;
+    labelWrap.appendChild(labelEl);
+    if (field.note) {
+      const noteEl = document.createElement("span");
+      noteEl.className = "measurement-note";
+      noteEl.textContent = field.note;
+      labelWrap.appendChild(document.createElement("br"));
+      labelWrap.appendChild(noteEl);
+    }
+
+    const inputWrap = document.createElement("div");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = "0.1";
+    input.value = (result[field.key] / 10).toFixed(1); // mm -> cm
+    const unit = document.createElement("span");
+    unit.className = "measurement-unit";
+    unit.textContent = "cm";
+    inputWrap.appendChild(input);
+    inputWrap.appendChild(unit);
+
+    row.appendChild(labelWrap);
+    row.appendChild(inputWrap);
+    measurementFields.appendChild(row);
+    measurementInputs[field.key] = input;
+  }
+}
+
+function tryComputeAndRender() {
+  try {
+    measurementError.hidden = true;
+    renderMeasurementFields(computeMeasurements());
+  } catch (err) {
+    measurementError.hidden = false;
+    measurementError.textContent = `Couldn't compute measurements: ${err.message}`;
+  }
+}
+
+recomputeBtn.addEventListener("click", tryComputeAndRender);
+
+function todayIsoDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Maps this screen's flat MEASUREMENT_FIELDS keys onto api.py's ProfileIn
+// wire shape (models.py's AnthropometryProfile via a lax DTO — see
+// api.py's docstring on ProfileIn for why the nested per-side segments and
+// ISO date string are shaped this way). single_sided is always false here:
+// the scan pipeline always captures both left and right, it never falls
+// back to a single symmetrised value.
+function buildProfilePayload() {
+  const mm = {};
+  for (const field of MEASUREMENT_FIELDS) {
+    mm[field.key] = Number(measurementInputs[field.key].value) * 10; // cm -> mm
+  }
+  return {
+    user_id: userIdInput.value.trim(),
+    captured_at: todayIsoDate(),
+    height_H_mm: Number(heightCmInput.value) * 10,
+    sitting_height_T_mm: mm.sitting_height_T_mm,
+    femur: { left_mm: mm.femur_L_mm, right_mm: mm.femur_R_mm, single_sided: false },
+    tibia: { left_mm: mm.tibia_L_mm, right_mm: mm.tibia_R_mm, single_sided: false },
+    arm: { left_mm: mm.arm_L_mm, right_mm: mm.arm_R_mm, single_sided: false },
+    biacromial_width_BAW_mm: mm.biacromial_width_mm,
+    chest_depth_Cd_mm: mm.chest_depth_Cd_mm,
+  };
+}
+
+// Zone 3: completion celebration + handoff into the chat product (Phase 2)
+// instead of dead-ending on a raw JSON dump. `profile` is the server's own
+// echoed-back AnthropometryProfile (already normalized user_id, etc.).
+function buildCelebrateStats(profile) {
+  const cm = (mm) => (mm / 10).toFixed(1);
+  const avgCm = (segment) => cm((segment.left_mm + segment.right_mm) / 2);
+  return [
+    ["Height", `${cm(profile.height_H_mm)} cm`],
+    ["Thigh", `${avgCm(profile.femur)} cm`],
+    ["Shin", `${avgCm(profile.tibia)} cm`],
+    ["Arm", `${avgCm(profile.arm)} cm`],
+    ["Shoulder width", `${cm(profile.biacromial_width_BAW_mm)} cm`],
+  ];
+}
+
+function runCelebrationAndRedirect(profile) {
+  const stats = buildCelebrateStats(profile);
+  celebrateStats.innerHTML = "";
+  stats.forEach(([label, value], i) => {
+    const row = document.createElement("div");
+    row.className = "celebrate-row";
+    row.style.animationDelay = `${0.15 * i}s`;
+    const labelEl = document.createElement("span");
+    labelEl.className = "celebrate-label";
+    labelEl.textContent = label;
+    const valueEl = document.createElement("span");
+    valueEl.className = "celebrate-value";
+    valueEl.textContent = value;
+    row.appendChild(labelEl);
+    row.appendChild(valueEl);
+    celebrateStats.appendChild(row);
+  });
+
+  screenDone.hidden = true;
+  screenCelebrate.hidden = false;
+
+  // Phase 2's chat product (frontend.html, Zones 4-6) isn't built yet, so
+  // this redirect 404s for now — the URL contract (?user_id=...&from=scan)
+  // is deliberately fixed now so frontend.html's FormFit entry step
+  // (Zone 5) can read it later and skip straight to chat instead of
+  // re-running the whole onboarding for someone who just finished it here.
+  const redirectUrl = `${window.location.origin}/?user_id=${encodeURIComponent(profile.user_id)}&from=scan`;
+  const revealMs = 150 * stats.length + 900;
+  setTimeout(() => {
+    window.location.href = redirectUrl;
+  }, revealMs);
+}
+
+confirmBtn.addEventListener("click", async () => {
+  measurementError.hidden = true;
+  if (!userIdInput.value.trim()) {
+    measurementError.hidden = false;
+    measurementError.textContent = "Enter your name first — it's used as your profile ID.";
+    return;
+  }
+
+  const apiBaseUrl = apiBaseUrlInput.value.trim().replace(/\/+$/, "");
+  const payload = buildProfilePayload();
+
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = "Saving…";
+  try {
+    const response = await fetch(`${apiBaseUrl}/profiles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail));
+    }
+    runCelebrationAndRedirect(body);
+  } catch (err) {
+    measurementError.hidden = false;
+    measurementError.textContent = `Couldn't save: ${err.message}. Check the API server address and that it's running.`;
+    measurementError.scrollIntoView({ behavior: "smooth", block: "center" });
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Confirm & save measurements";
+  }
+});
+</script>
+</body>
+</html>

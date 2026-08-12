@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ironclad Fitness</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* Design tokens lifted from the user's earlier Lovable/Vercel prototype
+     (form-fit-roan.vercel.app) — real HSL values extracted from its
+     shipped CSS. Applied to the WHOLE app now, home shell included (per
+     the user's screenshot of that prototype: light theme throughout, not
+     just inside FormFit's own flow — an earlier version of this file kept
+     the home shell dark/monochrome on purpose, that decision is reversed
+     now that the user showed what they actually wanted it to look like). */
+  :root {
+    color-scheme: light;
+    --background: 0 0% 100%;
+    --foreground: 220 13% 18%;
+    --card: 220 14% 96%;
+    --card-elevated: 220 14% 93%;
+    --primary: 217 91% 60%;
+    --primary-dark: 217 91% 52%;
+    --muted-foreground: 220 9% 46%;
+    --border: 220 13% 91%;
+    --destructive: 0 84% 60%;
+    --dark-navy: 222 24% 14%;
+    --radius: 1rem;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    margin: 0; background: hsl(var(--background)); color: hsl(var(--foreground));
+    min-height: 100vh; display: flex; justify-content: center;
+  }
+  .app { width: 100%; max-width: 480px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .screen { display: flex; flex-direction: column; gap: 16px; }
+  [hidden] { display: none !important; }
+  h1 {
+    font-family: "Barlow Condensed", Inter, sans-serif; font-size: 30px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.01em; margin: 0;
+  }
+  p { color: hsl(var(--muted-foreground)); line-height: 1.5; margin: 0; }
+
+  /* ---- Zone 4 (redesigned): home screen shell ---- */
+  #screenHome { padding-bottom: 84px; } /* clears the fixed bottom tab bar */
+  .home-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 0; }
+  .home-header-brand { display: flex; align-items: center; gap: 10px; }
+  .app-logo {
+    width: 36px; height: 36px; border-radius: 10px; background: hsl(var(--dark-navy));
+    color: white; display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .gym-name { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 20px; font-weight: 700; text-transform: uppercase; }
+  .home-header-icons { display: flex; gap: 8px; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 50%; background: hsl(var(--card));
+    border: none; display: flex; align-items: center; justify-content: center; font-size: 15px; cursor: pointer;
+  }
+
+  .greeting-sub { font-size: 15px; }
+  .greeting-name { font-size: 32px; margin-top: 2px; }
+
+  .today-card {
+    background: hsl(var(--dark-navy)); border-radius: var(--radius); padding: 18px; color: white;
+  }
+  .today-card-top { display: flex; justify-content: space-between; align-items: center; }
+  .today-label { font-size: 12px; letter-spacing: 0.08em; color: hsl(220 9% 60%); font-weight: 600; }
+  .offpeak-pill {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 4px 10px;
+    border-radius: 999px; background: hsl(220 13% 28%); color: hsl(220 9% 75%);
+  }
+  .today-card-main { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 10px; }
+  .today-count { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 52px; font-weight: 700; line-height: 1; }
+  .today-sub { font-size: 13px; color: hsl(220 9% 65%); margin-top: 4px; }
+  .pulse-icon { width: 60px; height: 30px; color: hsl(var(--primary)); }
+  .today-bar { height: 6px; border-radius: 3px; background: hsl(220 13% 28%); margin-top: 14px; overflow: hidden; }
+  .today-bar-fill { height: 100%; background: hsl(var(--primary)); border-radius: 3px; }
+  .today-bar-label { text-align: right; font-size: 12px; color: hsl(220 9% 65%); margin-top: 6px; }
+
+  .quick-actions { display: flex; gap: 10px; }
+  .quick-action {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: hsl(var(--card)); border: none; border-radius: var(--radius); padding: 16px 8px; cursor: pointer;
+  }
+  .quick-action-icon {
+    width: 40px; height: 40px; border-radius: 50%; background: white;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+    box-shadow: 0 1px 4px hsl(220 13% 18% / .1);
+  }
+  .quick-action-label { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; color: hsl(var(--foreground)); }
+
+  .section-heading-row { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px; }
+  .section-heading { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; }
+  .section-heading-muted { font-size: 12px; letter-spacing: 0.04em; color: hsl(var(--muted-foreground)); text-transform: uppercase; }
+
+  /* FormFit featured card — deliberately the one splash of colour on an
+     otherwise neutral/light shell, so it reads as a different, partnered
+     app embedded here, not just another card of the gym's own UI. */
+  #formfitTile {
+    display: block; text-align: left; border: none; border-radius: var(--radius); padding: 20px;
+    cursor: pointer; color: white; width: 100%;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)));
+    box-shadow: 0 12px 28px -10px hsl(var(--primary) / .5);
+  }
+  .featured-card-top { display: flex; justify-content: space-between; align-items: center; }
+  .new-pill {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 4px 10px;
+    border-radius: 999px; background: hsl(0 0% 100% / .25);
+  }
+  .featured-sparkle { font-size: 18px; }
+  .formfit-tile-title { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 24px; font-weight: 700; margin-top: 10px; text-transform: uppercase; }
+  .formfit-tile-sub { font-size: 13px; color: hsl(0 0% 100% / .85); margin-top: 6px; line-height: 1.4; }
+  .featured-cta {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 16px;
+    background: white; color: hsl(var(--primary-dark)); font-weight: 700; font-size: 14px;
+    padding: 10px 16px; border-radius: 999px;
+  }
+
+  .bottom-tab-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; background: white;
+    border-top: 1px solid hsl(var(--border)); z-index: 10;
+  }
+  .bottom-tab-bar-inner {
+    max-width: 480px; margin: 0 auto; display: flex; justify-content: space-around;
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+  .tab-item {
+    background: none; border: none; display: flex; flex-direction: column; align-items: center;
+    gap: 3px; color: hsl(var(--muted-foreground)); font-size: 10px; font-weight: 600; cursor: pointer;
+    padding: 4px 8px;
+  }
+  .tab-item-active, .tab-item:hover { color: hsl(var(--primary)); }
+  .tab-icon { font-size: 19px; }
+
+  /* ---- FormFit's own flow (name entry, is-this-you, splash, chat) ---- */
+  label.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: hsl(var(--foreground)); font-weight: 500; margin-top: 0; }
+  input[type="text"] {
+    background: white; border: 1px solid hsl(var(--border)); color: hsl(var(--foreground));
+    border-radius: 10px; padding: 10px 12px; font-size: 16px; font-family: inherit;
+  }
+  .card {
+    background: hsl(var(--card)); border-radius: var(--radius); padding: 16px;
+    border: 1px solid hsl(var(--border)); box-shadow: 0 2px 12px -4px hsl(231 80% 30% / .12);
+  }
+  .status-banner {
+    text-align: center; font-size: 15px; font-weight: 600; padding: 12px;
+    border-radius: 10px; background: hsl(var(--card-elevated)); color: hsl(var(--foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  #nameError.status-banner { background: hsl(0 84% 97%); color: hsl(var(--destructive)); border-color: hsl(0 84% 90%); }
+
+  /* FormFit-flow buttons (name entry, is-this-you, splash) — scoped to
+     NOT touch the home shell's own `.quick-action`/`#formfitTile`/
+     `.tab-item` (all more specific selectors, so they still win their
+     own look). */
+  #screenNameEntry button, #screenIsThisYou button {
+    font-family: inherit; font-size: 16px; font-weight: 700; padding: 14px 18px; border-radius: 10px;
+    border: none; cursor: pointer; color: white; width: 100%;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)));
+    box-shadow: 0 8px 24px -8px hsl(var(--primary) / .4);
+  }
+  #screenNameEntry button:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+  #screenIsThisYou button.secondary {
+    background: none; box-shadow: none; color: hsl(var(--muted-foreground)); font-weight: 500; border: 1px solid hsl(var(--border));
+  }
+
+  .splash-center { display: flex; flex-direction: column; align-items: center; gap: 16px; padding-top: 30vh; }
+  .splash-spinner {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 3px solid hsl(220 13% 91%); border-top-color: hsl(217 91% 60%);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #splashText { text-align: center; color: hsl(220 9% 46%); }
+
+  /* Zone 6 chat UI, redesigned 2026-08-08 against form-fit-roan.vercel.app's
+     own interactive chat demo (its visible marketing page is a single
+     static route with no chat screen rendered — the real component tree
+     was pulled out of its built JS bundle directly, same "fetch the raw
+     asset, don't trust an AI summary of it" approach as the earlier
+     Lovable-token extraction). Two structural problems this fixes: the
+     chat screen used to live inside `.app`'s 20px-padded, content-sized
+     column like every other screen, so it never reached the edges of the
+     device and left dead space below a short thread; and there was no way
+     back to the home screen once inside chat. `position: fixed` on
+     `#screenChat` escapes `.app`'s flex/padding entirely (no ancestor
+     creates a containing block for it), while `max-width: 480px` keeps
+     the same "mobile app frame centered on desktop" look the rest of the
+     app already commits to — this is a viewport-height fix, not a
+     full-bleed-on-desktop redesign. */
+  #screenChat {
+    position: fixed; inset: 0; z-index: 20;
+    width: 100%; max-width: 480px; margin: 0 auto;
+    height: 100vh; height: 100dvh;
+    background: white; display: flex; flex-direction: column; gap: 0;
+  }
+
+  .chat-header {
+    flex-shrink: 0; background: hsl(var(--primary)); color: white;
+    padding: max(20px, env(safe-area-inset-top)) 16px 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .chat-back-btn {
+    background: none; border: none; color: white; font-size: 22px;
+    line-height: 1; padding: 4px 6px 4px 0; cursor: pointer; flex-shrink: 0;
+  }
+  .chat-header-identity { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .chat-avatar {
+    width: 38px; height: 38px; border-radius: 10px; background: hsl(0 0% 100% / .15);
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+  .chat-title { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 17px; font-weight: 700; text-transform: uppercase; }
+  .chat-subtitle { font-size: 12px; color: hsl(0 0% 100% / .8); }
+  .chat-ai-pill {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 4px 9px;
+    border-radius: 999px; background: hsl(0 0% 100% / .18); flex-shrink: 0;
+  }
+
+  .equipment-strip {
+    flex-shrink: 0; display: flex; gap: 8px; overflow-x: auto;
+    background: hsl(var(--primary)); padding: 0 16px 14px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .equipment-strip::-webkit-scrollbar { display: none; }
+  .equipment-chip {
+    position: relative; flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 999px;
+    background: transparent; border: 1px solid hsl(0 0% 100% / .4); color: white;
+    font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .equipment-chip:disabled { opacity: 0.55; cursor: default; }
+  .chip-badge {
+    position: absolute; top: -7px; right: -6px;
+    background: white; color: hsl(var(--primary-dark));
+    font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+    padding: 2px 5px; border-radius: 999px; line-height: 1.4;
+  }
+
+  /* Photo picker button, left of the chat input — opens #pickerOverlay.
+     Selector needs 2 classes' worth of specificity to beat the generic
+     `.chat-input-row button` rule below it (which would otherwise paint
+     this the same primary-blue as the send button). */
+  .chat-input-row .picker-open-btn {
+    width: 42px; height: 42px; flex-shrink: 0; padding: 0; border-radius: 50%;
+    background: hsl(var(--card)); color: hsl(var(--foreground)); border: 1px solid hsl(var(--border));
+    font-size: 18px; font-family: inherit; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: none;
+  }
+
+  /* Full-screen "choose by photo" picker — same fixed/full-viewport,
+     480px-max-width-centered treatment as #screenChat, stacked above it
+     (higher z-index) since it opens on top of the chat, not instead of it. */
+  .picker-overlay {
+    position: fixed; inset: 0; z-index: 30;
+    width: 100%; max-width: 480px; margin: 0 auto;
+    height: 100vh; height: 100dvh;
+    background: hsl(var(--background)); display: flex; flex-direction: column;
+  }
+  .picker-header {
+    flex-shrink: 0; background: hsl(var(--primary)); color: white;
+    padding: max(20px, env(safe-area-inset-top)) 16px 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .picker-title { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 19px; font-weight: 700; text-transform: uppercase; }
+  /* Compact vertical list (not a photo grid) — small fixed-size thumbnail
+     per row rather than a big square, so more machines fit on screen at
+     once and scanning by name+photo together reads faster than a grid of
+     tiles. Explicit pixel width/height on the thumbnail (not aspect-ratio)
+     is deliberate: an aspect-ratio-sized image as a grid/flex child hit a
+     real Chromium track-sizing bug earlier (rows silently overlapped) —
+     a fixed-size thumbnail in a simple flex row sidesteps that whole class
+     of bug rather than re-risking it. */
+  .picker-grid {
+    flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    display: flex; flex-direction: column; gap: 8px; padding: 16px;
+  }
+  .picker-card {
+    flex-shrink: 0; display: flex; align-items: center; gap: 12px;
+    background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 12px;
+    padding: 8px 14px 8px 8px; cursor: pointer; text-align: left;
+  }
+  .picker-card:disabled { opacity: 0.55; cursor: default; }
+  .picker-card-photo {
+    flex-shrink: 0; width: 52px; height: 52px; border-radius: 8px;
+    object-fit: contain; background: white; display: block;
+  }
+  .picker-card-photo-placeholder {
+    flex-shrink: 0; width: 52px; height: 52px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; background: hsl(var(--card-elevated)); color: hsl(var(--muted-foreground));
+  }
+  .picker-card-label {
+    font-size: 14px; font-weight: 600; color: hsl(var(--foreground));
+  }
+  .picker-card-badge {
+    margin-left: auto; flex-shrink: 0;
+    background: hsl(var(--primary)); color: white;
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+    padding: 3px 7px; border-radius: 999px;
+  }
+
+  .chat-thread {
+    flex: 1; min-height: 0; overflow-y: auto;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 16px; background: hsl(var(--background));
+  }
+  .chat-bubble {
+    flex-shrink: 0; max-width: 82%; padding: 10px 14px; border-radius: 16px;
+    font-size: 14px; line-height: 1.45; white-space: pre-wrap;
+  }
+  .chat-bubble-bot {
+    align-self: flex-start; background: hsl(var(--card));
+    border-left: 3px solid hsl(var(--primary));
+    color: hsl(var(--foreground)); border-bottom-left-radius: 4px;
+  }
+  .chat-bubble-user {
+    align-self: flex-end; color: white; border-bottom-right-radius: 4px;
+    background: hsl(var(--primary));
+  }
+  .chat-bubble-thinking {
+    flex-shrink: 0; align-self: flex-start; background: hsl(var(--card));
+    border-radius: 16px; border-bottom-left-radius: 4px;
+    padding: 14px 16px; display: flex; gap: 4px;
+  }
+  .chat-bubble-thinking span {
+    width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--muted-foreground));
+    animation: pulseDot 1s infinite ease-in-out;
+  }
+  .chat-bubble-thinking span:nth-child(2) { animation-delay: 0.15s; }
+  .chat-bubble-thinking span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes pulseDot { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+
+  /* Thumbs up/down under a bot reply — see attachFeedbackUI(). A separate
+     row under the bubble, not inside it, so it works identically after
+     both a plain chat-bubble reply and a machine-setup card. */
+  .feedback-row { align-self: flex-start; display: flex; align-items: center; gap: 6px; margin-top: -4px; }
+  .feedback-btn {
+    background: none; border: 1px solid hsl(var(--border)); border-radius: 999px;
+    width: 30px; height: 30px; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .feedback-btn:active { background: hsl(var(--card)); }
+  .feedback-thanks { font-size: 12px; color: hsl(var(--muted-foreground)); padding: 4px 2px; }
+  .feedback-comment-row { display: flex; gap: 6px; width: 100%; max-width: 320px; }
+  .feedback-comment-row input[type="text"] {
+    flex: 1; font-size: 13px; padding: 7px 10px; border-radius: 8px;
+  }
+  .feedback-comment-row button {
+    font-family: inherit; font-size: 12px; font-weight: 700; color: white;
+    background: hsl(var(--primary)); border: none; border-radius: 8px; padding: 0 12px; cursor: pointer;
+  }
+
+  /* Structured machine-setup card. "Your Setup" rows are rendered directly
+     from the API's `facts` array (already-computed, exact values) — never
+     from the LLM's own phrasing of numbers, so the figures shown here
+     can't drift from what the engine actually decided. */
+  .chat-bubble-setup {
+    flex-shrink: 0; max-width: 92%; padding: 0; overflow: hidden; border-radius: 16px;
+    background: hsl(var(--card)); box-shadow: 0 2px 12px -4px hsl(231 80% 30% / .18);
+  }
+  .setup-header {
+    background: hsl(var(--dark-navy)); color: hsl(var(--primary));
+    padding: 12px 16px; font-family: "Barlow Condensed", Inter, sans-serif;
+    font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .setup-body { padding: 14px 16px; }
+  .setup-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: hsl(var(--muted-foreground)); margin-bottom: 6px; }
+  .setup-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; font-size: 13px; }
+  .setup-label { color: hsl(var(--muted-foreground)); }
+  .setup-value { font-family: "Barlow Condensed", Inter, sans-serif; font-weight: 700; font-size: 15px; }
+  .setup-section-header {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: hsl(var(--primary-dark)); margin-top: 12px; margin-bottom: 4px; font-weight: 700;
+  }
+  .setup-why { margin: 0; font-size: 13px; line-height: 1.5; color: hsl(var(--foreground) / .9); }
+  .setup-list { margin: 0; padding-left: 0; list-style: none; }
+  .setup-list li { display: flex; gap: 8px; font-size: 13px; line-height: 1.5; margin-bottom: 5px; color: hsl(var(--foreground) / .9); }
+  .setup-list li::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%; background: hsl(var(--primary));
+    margin-top: 6px; flex-shrink: 0;
+  }
+
+  .chat-input-bar {
+    flex-shrink: 0; background: hsl(0 0% 100% / .95); backdrop-filter: blur(12px);
+    border-top: 1px solid hsl(var(--border));
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+  .chat-input-row { display: flex; align-items: center; gap: 8px; }
+  .chat-input-row input[type="text"] { flex: 1; border-radius: 999px; background: hsl(var(--card)); }
+  .chat-input-row button {
+    width: 42px; height: 42px; flex-shrink: 0; padding: 0; border-radius: 50%;
+    background: hsl(var(--primary)); color: white; border: none; font-size: 16px;
+    font-family: inherit; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 6px 16px -6px hsl(var(--primary) / .5);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Zone 4 (redesigned to match the user's earlier Lovable prototype
+       screenshot): fake generic gym-app home screen. Everything here is
+       decorative/non-functional except the FormFit card/tab — this shell
+       exists purely to make FormFit feel like a partnered feature inside
+       a real gym's app, not a standalone demo. -->
+  <section id="screenHome" class="screen">
+    <div class="home-header">
+      <div class="home-header-brand">
+        <div class="app-logo">✨</div>
+        <div class="gym-name">FitHub</div>
+      </div>
+      <div class="home-header-icons">
+        <button class="icon-btn" type="button">🔍</button>
+        <button class="icon-btn" type="button">🔔</button>
+      </div>
+    </div>
+
+    <div>
+      <p class="greeting-sub">Good morning,</p>
+      <h1 id="greetingName" class="greeting-name">there 👋</h1>
+    </div>
+
+    <div class="today-card">
+      <div class="today-card-top">
+        <span class="today-label">TODAY</span>
+        <span class="offpeak-pill">OFF-PEAK</span>
+      </div>
+      <div class="today-card-main">
+        <div>
+          <div class="today-count">51</div>
+          <div class="today-sub">people training right now</div>
+        </div>
+        <svg class="pulse-icon" viewBox="0 0 60 30" fill="none">
+          <polyline points="0,15 12,15 18,4 24,26 30,10 36,20 42,15 60,15" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>
+      <div class="today-bar"><div class="today-bar-fill" style="width: 58%"></div></div>
+      <div class="today-bar-label">58%</div>
+    </div>
+
+    <div class="quick-actions">
+      <button class="quick-action" type="button">
+        <span class="quick-action-icon">📅</span>
+        <span class="quick-action-label">BOOK</span>
+      </button>
+      <button class="quick-action" type="button">
+        <span class="quick-action-icon">👥</span>
+        <span class="quick-action-label">TRAINERS</span>
+      </button>
+      <button class="quick-action" type="button">
+        <span class="quick-action-icon">📈</span>
+        <span class="quick-action-label">STATS</span>
+      </button>
+    </div>
+
+    <div class="section-heading-row">
+      <span class="section-heading">Featured</span>
+      <span class="section-heading-muted">For you</span>
+    </div>
+
+    <button id="formfitTile">
+      <div class="featured-card-top">
+        <span class="new-pill">NEW</span>
+        <span class="featured-sparkle">✨</span>
+      </div>
+      <div class="formfit-tile-title">FormFit</div>
+      <div class="formfit-tile-sub">Personalised machine setups, calculated from your measurements.</div>
+      <span class="featured-cta">Open FormFit <span>→</span></span>
+    </button>
+  </section>
+
+  <!-- Zone 5: FormFit's own entry flow. -->
+  <section id="screenNameEntry" class="screen" hidden>
+    <h1>Welcome to FormFit</h1>
+    <p>Enter your name to get started — this is how we'll find your saved
+    measurements next time.</p>
+    <label class="field">Your name
+      <input id="nameInput" type="text" placeholder="e.g. yaroslav" />
+    </label>
+    <button id="nameContinueBtn">Continue</button>
+    <div id="nameError" class="status-banner" hidden></div>
+  </section>
+
+  <section id="screenIsThisYou" class="screen" hidden>
+    <h1>Welcome back</h1>
+    <p id="isThisYouText"></p>
+    <button id="isThisYouYesBtn">Yes, that's me</button>
+    <button id="isThisYouNoBtn" class="secondary">No, I'm someone else</button>
+  </section>
+
+  <section id="screenSplash" class="screen" hidden>
+    <div class="splash-center">
+      <div class="splash-spinner"></div>
+      <p id="splashText">Getting things ready…</p>
+    </div>
+  </section>
+
+  <!-- Zone 6: the real chat UI. Both the "yes that's me" returning-user
+       path and scan.html's post-scan handoff land here. Fixed/full-viewport
+       (see #screenChat's own CSS comment) instead of living inside .app's
+       padded column like the other screens. -->
+  <section id="screenChat" class="screen" hidden>
+    <header class="chat-header">
+      <button id="chatBackBtn" class="chat-back-btn" type="button" aria-label="Back to home">←</button>
+      <div class="chat-header-identity">
+        <div class="chat-avatar">💪</div>
+        <div>
+          <div class="chat-title">FormFit</div>
+          <div class="chat-subtitle">Your setup assistant</div>
+        </div>
+      </div>
+      <span class="chat-ai-pill">AI</span>
+    </header>
+
+    <div id="equipmentStrip" class="equipment-strip"></div>
+    <div id="chatThread" class="chat-thread"></div>
+
+    <div class="chat-input-bar">
+      <div class="chat-input-row">
+        <button id="pickerOpenBtn" class="picker-open-btn" type="button" aria-label="Browse equipment with photos">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="4" y1="7" x2="20" y2="7" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="17" x2="20" y2="17" />
+          </svg>
+        </button>
+        <input id="chatInput" type="text" placeholder="e.g. I'm at the lat pulldown" />
+        <button id="chatSendBtn" type="button" aria-label="Send">➤</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- Full-screen equipment picker with real machine photos — for anyone who
+     doesn't recognise a machine by name. Sits above #screenChat (higher
+     z-index), opened via the 🖼️ button next to the chat input, tapping a
+     tile sends that machine's name exactly like tapping an equipment-strip
+     chip already does. Separate top-level fixed overlay (not nested inside
+     #screenChat) so it can cover the whole viewport including the chat
+     header, same "position:fixed escapes .app's layout" trick used for
+     #screenChat itself. -->
+<section id="pickerOverlay" class="picker-overlay" hidden>
+  <header class="picker-header">
+    <button id="pickerCloseBtn" class="chat-back-btn" type="button" aria-label="Close">←</button>
+    <div class="picker-title">Choose your machine</div>
+  </header>
+  <div id="pickerGrid" class="picker-grid"></div>
+</section>
+
+<!-- Fixed bottom tab bar — only shown on the home screen (toggled
+     alongside screen switching in the script below). Home/FormFit are
+     the only tabs that do anything; the rest are decorative, matching
+     the rest of this fake host-app shell. -->
+<nav id="bottomTabBar" class="bottom-tab-bar">
+  <div class="bottom-tab-bar-inner">
+    <button class="tab-item tab-item-active" type="button"><span class="tab-icon">🏠</span><span class="tab-label">Home</span></button>
+    <button class="tab-item" type="button"><span class="tab-icon">📅</span><span class="tab-label">Classes</span></button>
+    <button class="tab-item" type="button"><span class="tab-icon">🏋️</span><span class="tab-label">Workouts</span></button>
+    <button id="formfitTabItem" class="tab-item" type="button"><span class="tab-icon">🧍</span><span class="tab-label">FormFit</span></button>
+    <button class="tab-item" type="button"><span class="tab-icon">🎟️</span><span class="tab-label">Activity</span></button>
+  </div>
+</nav>
+
+<script type="module">
+import { preloadPoseLandmarker } from "/scan/mediapipe_runner.mjs";
+
+const API_BASE = window.location.origin; // this page and api.py are the same origin/process
+
+const screenHome = document.getElementById("screenHome");
+const screenNameEntry = document.getElementById("screenNameEntry");
+const screenIsThisYou = document.getElementById("screenIsThisYou");
+const screenSplash = document.getElementById("screenSplash");
+const screenChat = document.getElementById("screenChat");
+const ALL_SCREENS = [screenHome, screenNameEntry, screenIsThisYou, screenSplash, screenChat];
+
+const greetingName = document.getElementById("greetingName");
+// Only known once someone has actually gone through the FormFit name-entry
+// flow at least once on this device (see goToSplash) — generic fallback
+// otherwise, never a fake name.
+const savedDisplayName = localStorage.getItem("formfit_display_name");
+if (savedDisplayName) greetingName.textContent = `${savedDisplayName} 👋`;
+
+const nameInput = document.getElementById("nameInput");
+const nameContinueBtn = document.getElementById("nameContinueBtn");
+const nameError = document.getElementById("nameError");
+const isThisYouText = document.getElementById("isThisYouText");
+const isThisYouYesBtn = document.getElementById("isThisYouYesBtn");
+const isThisYouNoBtn = document.getElementById("isThisYouNoBtn");
+const splashText = document.getElementById("splashText");
+const equipmentStrip = document.getElementById("equipmentStrip");
+const chatThread = document.getElementById("chatThread");
+const chatInput = document.getElementById("chatInput");
+const chatSendBtn = document.getElementById("chatSendBtn");
+const chatBackBtn = document.getElementById("chatBackBtn");
+const bottomTabBar = document.getElementById("bottomTabBar");
+const pickerOpenBtn = document.getElementById("pickerOpenBtn");
+const pickerCloseBtn = document.getElementById("pickerCloseBtn");
+const pickerOverlay = document.getElementById("pickerOverlay");
+const pickerGrid = document.getElementById("pickerGrid");
+
+pickerOpenBtn.addEventListener("click", () => { pickerOverlay.hidden = false; });
+pickerCloseBtn.addEventListener("click", () => { pickerOverlay.hidden = true; });
+
+function showScreen(target) {
+  for (const screen of ALL_SCREENS) screen.hidden = screen !== target;
+  // The fixed bottom tab bar is only part of the home screen's own look
+  // (see the reference screenshot) — hidden everywhere else.
+  bottomTabBar.hidden = target !== screenHome;
+}
+
+// Decorative-only: the other tab-bar/quick-action buttons don't do
+// anything — matches the rest of this fake host-app shell, only
+// FormFit is real.
+function enterFormFit() {
+  showScreen(screenNameEntry);
+  nameInput.focus();
+}
+document.getElementById("formfitTile").addEventListener("click", enterFormFit);
+document.getElementById("formfitTabItem").addEventListener("click", enterFormFit);
+
+let pendingName = null;
+
+function goToSplash(name, returning) {
+  pendingName = name;
+  // As-typed casing (before the backend lowercases it for lookup) — used
+  // only for the home screen's own greeting, never sent anywhere.
+  localStorage.setItem("formfit_display_name", name);
+  showScreen(screenSplash);
+  splashText.textContent = returning
+    ? "Welcome back — getting your setup ready…"
+    : "Getting things ready for your scan…";
+
+  // Kick off the MediaPipe WASM+model download now, in the background,
+  // while the splash shows — solves the earlier real-device finding that
+  // the first camera-step call froze the UI for several seconds with no
+  // feedback (see PRODUCT_ROADMAP_NOTES.md's "model-loading silence" gap).
+  // Only the scan path actually needs it, but it's harmless to warm up
+  // either way in case a returning user scans again later.
+  preloadPoseLandmarker().catch(() => {}); // best-effort; real errors surface for real on the scan page itself
+
+  setTimeout(() => {
+    if (returning) {
+      window.location.href = `${API_BASE}/?user_id=${encodeURIComponent(name)}&chat=1`;
+    } else {
+      window.location.href = `${API_BASE}/scan/scan.html?user_id=${encodeURIComponent(name)}`;
+    }
+  }, 1500);
+}
+
+// Letters (any script)/numbers/spaces/hyphens/apostrophes only — this
+// name becomes a user_id threaded through several URLs
+// (encodeURIComponent + redirects + query-string round-trips). Rejecting
+// emoji/exotic symbols here up front is cheap insurance against a
+// malformed-surrogate edge case breaking encodeURIComponent somewhere
+// downstream, rather than debugging a cryptic browser error later.
+const SAFE_NAME_PATTERN = /^[\p{L}\p{N} '-]+$/u;
+
+nameContinueBtn.addEventListener("click", async () => {
+  const name = nameInput.value.trim();
+  nameError.hidden = true;
+  if (!name) {
+    nameError.hidden = false;
+    nameError.textContent = "Enter your name to continue.";
+    return;
+  }
+  if (!SAFE_NAME_PATTERN.test(name)) {
+    nameError.hidden = false;
+    nameError.textContent = "Please use only letters, numbers, and spaces in your name (no emoji or symbols).";
+    return;
+  }
+
+  nameContinueBtn.disabled = true;
+  nameContinueBtn.textContent = "Checking…";
+  try {
+    const res = await fetch(`${API_BASE}/profiles/${encodeURIComponent(name)}/exists`);
+    const body = await res.json();
+    if (body.exists) {
+      isThisYouText.textContent = `We found a profile named "${name}" — is this you?`;
+      showScreen(screenIsThisYou);
+    } else {
+      goToSplash(name, false);
+    }
+  } catch (err) {
+    nameError.hidden = false;
+    nameError.textContent = `Couldn't reach the server: ${err.message}`;
+  } finally {
+    nameContinueBtn.disabled = false;
+    nameContinueBtn.textContent = "Continue";
+  }
+});
+
+isThisYouYesBtn.addEventListener("click", () => goToSplash(nameInput.value.trim(), true));
+
+isThisYouNoBtn.addEventListener("click", () => {
+  nameInput.value = "";
+  showScreen(screenNameEntry);
+  nameInput.focus();
+});
+
+// Zone 6: chat. Client-side label per machine slug — purely presentational
+// (friendly name to show on the tappable equipment strip / photo picker);
+// the actual machine-intent decision still happens server-side in
+// POST /assistant (see api.py's detect_machine_intent), tapping a chip or
+// a picker tile just sends its label as if the user had typed it.
+const MACHINE_INFO = {
+  chest_press: { label: "Chest Press" },
+  shoulder_press: { label: "Shoulder Press" },
+  lat_pulldown: { label: "Lat Pulldown" },
+  pec_deck: { label: "Pec Deck (Chest Fly)" },
+  seated_row: { label: "Seated Row" },
+  leg_extension: { label: "Leg Extension" },
+  leg_curl: { label: "Leg Curl" },
+  leg_press: { label: "Leg Press" },
+};
+
+// Real Matrix product photos (from Matrix's official site, see
+// machine_photos/ + api.py's /machine_photos static mount) for the 5
+// machines the live assistant actually supports — used by the full-screen
+// picker so someone who doesn't know a machine by name can recognise it.
+// leg_press/leg_curl/leg_extension deliberately have no entry here (no
+// photos exist yet) — the picker falls back to an icon placeholder tile
+// for those, still tappable, still routes to the "not available yet" reply.
+const MACHINE_PHOTOS = {
+  chest_press: "/machine_photos/chest_press.png",
+  shoulder_press: "/machine_photos/shoulder_press.png",
+  lat_pulldown: "/machine_photos/lat_pulldown.png",
+  pec_deck: "/machine_photos/pec_deck.png",
+  seated_row: "/machine_photos/seated_row.png",
+};
+
+// Matches api.py's _UNSUPPORTED_MACHINES — these chips/tiles still tap
+// through to a real (friendly "not available yet") bot reply, just
+// visually flagged up front so tapping one isn't a surprise dead-end.
+const UNSUPPORTED_SLUGS = new Set(["leg_press", "leg_curl", "leg_extension"]);
+
+let currentUserId = null;
+
+// Chat history survives a refresh via localStorage — the backend has no
+// endpoint that reconstructs a conversation (POST /assistant is stateless
+// per-turn), so this is the one place the visible thread is ever stored.
+// Entries: {type:"text", role, text} or {type:"setup", facts, text}
+// (enough to replay via appendMessage/appendMachineSetupMessage below).
+// Capped so localStorage can't grow unbounded over a long session.
+const CHAT_HISTORY_LIMIT = 60;
+
+function chatHistoryKey(userId) {
+  return `formfit_chat_${userId}`;
+}
+
+function loadChatHistory(userId) {
+  try {
+    return JSON.parse(localStorage.getItem(chatHistoryKey(userId)) || "[]");
+  } catch (err) {
+    return []; // corrupt/foreign data — treat as no history rather than crash
+  }
+}
+
+function logChatMessage(userId, entry) {
+  const history = loadChatHistory(userId);
+  history.push(entry);
+  while (history.length > CHAT_HISTORY_LIMIT) history.shift();
+  localStorage.setItem(chatHistoryKey(userId), JSON.stringify(history));
+}
+
+function replayChatHistory(history) {
+  for (const entry of history) {
+    if (entry.type === "setup") {
+      appendMachineSetupMessage(entry.machine, entry.facts, entry.text);
+    } else {
+      appendMessage(entry.role, entry.text);
+    }
+  }
+}
+
+function renderEquipmentStrip(slugs) {
+  equipmentStrip.innerHTML = "";
+  for (const slug of slugs) {
+    const info = MACHINE_INFO[slug] || { label: slug };
+    const badge = UNSUPPORTED_SLUGS.has(slug) ? `<span class="chip-badge">Soon</span>` : "";
+    const chip = document.createElement("button");
+    chip.className = "equipment-chip";
+    chip.innerHTML = `${badge}<span>${info.label}</span>`;
+    chip.addEventListener("click", () => sendMessage(info.label));
+    equipmentStrip.appendChild(chip);
+  }
+}
+
+// Full-screen photo picker's grid — built once alongside the strip (same
+// slug fetch, no separate round-trip) but only actually looked at once the
+// user opens the picker via #pickerOpenBtn.
+function renderPickerGrid(slugs) {
+  pickerGrid.innerHTML = "";
+  for (const slug of slugs) {
+    const info = MACHINE_INFO[slug] || { label: slug };
+    const photoUrl = MACHINE_PHOTOS[slug];
+    const badge = UNSUPPORTED_SLUGS.has(slug) ? `<span class="picker-card-badge">Soon</span>` : "";
+    // onerror swaps to the same placeholder tile used when a machine has
+    // no MACHINE_PHOTOS entry at all — a deploy without machine_photos/
+    // populated (see .gitignore) shouldn't show a broken-image icon.
+    const media = photoUrl
+      ? `<img class="picker-card-photo" src="${photoUrl}" alt="${info.label}" loading="lazy" onerror="this.outerHTML='<div class=&quot;picker-card-photo-placeholder&quot;>🏋️</div>'" />`
+      : `<div class="picker-card-photo-placeholder">🏋️</div>`;
+    const card = document.createElement("button");
+    card.className = "picker-card";
+    card.type = "button";
+    card.innerHTML = `${media}<span class="picker-card-label">${info.label}</span>${badge}`;
+    card.addEventListener("click", () => {
+      pickerOverlay.hidden = true;
+      sendMessage(info.label);
+    });
+    pickerGrid.appendChild(card);
+  }
+}
+
+async function loadEquipmentStrip() {
+  try {
+    const res = await fetch(`${API_BASE}/machines`);
+    const slugs = await res.json();
+    renderEquipmentStrip(slugs);
+    renderPickerGrid(slugs);
+  } catch (err) {
+    equipmentStrip.hidden = true; // fail quietly — typing still works without the strip/picker
+  }
+}
+
+function appendMessage(role, text) {
+  const bubble = document.createElement("div");
+  bubble.className = `chat-bubble chat-bubble-${role}`;
+  bubble.textContent = text;
+  chatThread.appendChild(bubble);
+  chatThread.scrollTop = chatThread.scrollHeight;
+  return bubble;
+}
+
+function appendThinkingBubble() {
+  const bubble = document.createElement("div");
+  bubble.className = "chat-bubble-thinking";
+  bubble.innerHTML = "<span></span><span></span><span></span>";
+  chatThread.appendChild(bubble);
+  chatThread.scrollTop = chatThread.scrollHeight;
+  return bubble;
+}
+
+// `label -> value` rows for the "Your Setup" block, built directly from the
+// API's `facts` array (see api.py's ExplanationFacts) — never from the
+// LLM's own retelling of a number, so what's shown here can never drift
+// from what the engine actually computed.
+function humanizeAxisName(axisName) {
+  return axisName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function factsToSetupRows(facts) {
+  return (facts || []).map((f) => {
+    let value;
+    if (f.achieved_pin !== null && f.achieved_pin !== undefined) {
+      value = `Pin ${f.achieved_pin}`;
+    } else if (f.achieved_coordinate_mm !== null && f.achieved_coordinate_mm !== undefined) {
+      value = `${(f.achieved_coordinate_mm / 10).toFixed(1)} cm`;
+    } else {
+      value = "—"; // em dash — no continuous target for this axis
+    }
+    return { label: humanizeAxisName(f.axis_name), value };
+  });
+}
+
+// Parses the narration's mandated WHY:/TIPS:/AVOID: three-line format (see
+// machines/narration_common.py's SYSTEM_PROMPT rule 9). Returns null if the
+// model didn't follow it — caller falls back to showing the raw text
+// rather than a broken/empty structured block.
+function parseNarration(text) {
+  const why = text.match(/^WHY:\s*(.+)$/m);
+  if (!why) return null;
+  const tips = text.match(/^TIPS:\s*(.+)$/m);
+  const avoid = text.match(/^AVOID:\s*(.+)$/m);
+  const splitItems = (m) => (m ? m[1].split("|").map((s) => s.trim()).filter(Boolean) : []);
+  return { why: why[1].trim(), tips: splitItems(tips), avoid: splitItems(avoid) };
+}
+
+function appendMachineSetupMessage(machine, facts, narrationText) {
+  const wrap = document.createElement("div");
+  wrap.className = "chat-bubble-setup";
+
+  const header = document.createElement("div");
+  header.className = "setup-header";
+  // MACHINE_INFO's friendly label (falls back to humanizing the slug for
+  // any machine not in that map) — was re-deriving from the bare slug
+  // before, which is why Pec Deck's card header couldn't show the
+  // "(Chest Fly)" qualifier that the equipment strip/picker already have.
+  header.textContent = (MACHINE_INFO[machine] || { label: humanizeAxisName(machine) }).label;
+  wrap.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "setup-body";
+  wrap.appendChild(body);
+
+  const title = document.createElement("div");
+  title.className = "setup-title";
+  title.textContent = "Your Setup";
+  body.appendChild(title);
+
+  for (const row of factsToSetupRows(facts)) {
+    const rowEl = document.createElement("div");
+    rowEl.className = "setup-row";
+    const labelEl = document.createElement("span");
+    labelEl.className = "setup-label";
+    labelEl.textContent = row.label;
+    const valueEl = document.createElement("span");
+    valueEl.className = "setup-value";
+    valueEl.textContent = row.value;
+    rowEl.appendChild(labelEl);
+    rowEl.appendChild(valueEl);
+    body.appendChild(rowEl);
+  }
+
+  const parsed = parseNarration(narrationText);
+  if (parsed) {
+    const whyHeader = document.createElement("div");
+    whyHeader.className = "setup-section-header";
+    whyHeader.textContent = "Why this works for you";
+    body.appendChild(whyHeader);
+    const whyBody = document.createElement("p");
+    whyBody.className = "setup-why";
+    whyBody.textContent = parsed.why;
+    body.appendChild(whyBody);
+
+    const addList = (heading, items) => {
+      if (!items.length) return;
+      const header = document.createElement("div");
+      header.className = "setup-section-header";
+      header.textContent = heading;
+      body.appendChild(header);
+      const list = document.createElement("ul");
+      list.className = "setup-list";
+      for (const item of items) {
+        const li = document.createElement("li");
+        li.textContent = item;
+        list.appendChild(li);
+      }
+      body.appendChild(list);
+    };
+    addList("Technique tips", parsed.tips);
+    addList("⚠️ Avoid", parsed.avoid);
+  } else {
+    // Model didn't follow the WHY/TIPS/AVOID format — fall back to
+    // showing its raw reply rather than an empty-looking bubble.
+    const raw = document.createElement("p");
+    raw.style.margin = "8px 0 0";
+    raw.textContent = narrationText;
+    body.appendChild(raw);
+  }
+
+  chatThread.appendChild(wrap);
+  chatThread.scrollTop = chatThread.scrollHeight;
+}
+
+// Thumbs up/down under a bot reply — POSTs to /feedback, best-effort (a
+// failed feedback send shouldn't interrupt the chat, so errors are
+// swallowed here unlike the rest of this file's deliberately-loud
+// error handling for actual chat failures). Not replayed on history
+// resume (see enterChat) — feedback is an in-the-moment action on a
+// reply that's still fresh on screen, not something to re-offer on an
+// old message after a refresh.
+function attachFeedbackUI(machine) {
+  const row = document.createElement("div");
+  row.className = "feedback-row";
+  const upBtn = document.createElement("button");
+  upBtn.className = "feedback-btn";
+  upBtn.type = "button";
+  upBtn.setAttribute("aria-label", "Helpful");
+  upBtn.textContent = "👍";
+  const downBtn = document.createElement("button");
+  downBtn.className = "feedback-btn";
+  downBtn.type = "button";
+  downBtn.setAttribute("aria-label", "Not helpful");
+  downBtn.textContent = "👎";
+  row.appendChild(upBtn);
+  row.appendChild(downBtn);
+  chatThread.appendChild(row);
+  chatThread.scrollTop = chatThread.scrollHeight;
+
+  const sendFeedback = (rating, comment) => {
+    fetch(`${API_BASE}/feedback/${encodeURIComponent(currentUserId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating, machine, comment: comment || null }),
+    }).catch(() => {}); // best-effort — see comment above
+  };
+
+  const showThanks = (text) => {
+    row.innerHTML = "";
+    const thanks = document.createElement("span");
+    thanks.className = "feedback-thanks";
+    thanks.textContent = text;
+    row.appendChild(thanks);
+  };
+
+  upBtn.addEventListener("click", () => {
+    sendFeedback("up", null);
+    showThanks("Thanks! 👍");
+  });
+
+  downBtn.addEventListener("click", () => {
+    row.innerHTML = "";
+    const commentRow = document.createElement("div");
+    commentRow.className = "feedback-comment-row";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "What wasn't right? (optional)";
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "button";
+    submitBtn.textContent = "Send";
+    commentRow.appendChild(input);
+    commentRow.appendChild(submitBtn);
+    row.appendChild(commentRow);
+    chatThread.scrollTop = chatThread.scrollHeight;
+    input.focus();
+
+    const submit = () => {
+      sendFeedback("down", input.value.trim());
+      showThanks("Thanks for letting us know.");
+    };
+    submitBtn.addEventListener("click", submit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+  });
+}
+
+async function sendMessage(text) {
+  const trimmed = text.trim();
+  if (!trimmed || !currentUserId) return;
+
+  appendMessage("user", trimmed);
+  logChatMessage(currentUserId, { type: "text", role: "user", text: trimmed });
+  chatInput.value = "";
+  chatInput.disabled = true;
+  chatSendBtn.disabled = true;
+  const thinking = appendThinkingBubble();
+
+  try {
+    const res = await fetch(`${API_BASE}/assistant/${encodeURIComponent(currentUserId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: trimmed }),
+    });
+    const body = await res.json();
+    thinking.remove();
+    if (!res.ok) {
+      // Not logged — a stale error bubble on resume would be more
+      // confusing than useful, and the point of leaving these loud (per
+      // project decision) is so the friend reports it live, not later.
+      appendMessage("bot", `Something went wrong: ${body.detail || res.statusText}`);
+    } else if (body.kind === "machine_setup") {
+      appendMachineSetupMessage(body.machine, body.facts, body.reply);
+      logChatMessage(currentUserId, { type: "setup", machine: body.machine, facts: body.facts, text: body.reply });
+      attachFeedbackUI(body.machine);
+    } else {
+      appendMessage("bot", body.reply);
+      logChatMessage(currentUserId, { type: "text", role: "bot", text: body.reply });
+      attachFeedbackUI(body.machine || null);
+    }
+  } catch (err) {
+    thinking.remove();
+    // err.name included deliberately (e.g. "TypeError" vs a network
+    // failure) — if this fires again, it pinpoints whether it's a bad
+    // URL/encoding issue or a real connectivity problem, instead of just
+    // the bare message.
+    appendMessage("bot", `Couldn't reach the server: ${err.name}: ${err.message}`);
+  } finally {
+    chatInput.disabled = false;
+    chatSendBtn.disabled = false;
+    chatInput.focus();
+  }
+}
+
+chatSendBtn.addEventListener("click", () => sendMessage(chatInput.value));
+chatInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendMessage(chatInput.value);
+});
+
+// Only way back to the fake gym home screen once inside chat — the
+// chat/localStorage state itself is untouched (formfit_user_id stays put),
+// so re-entering FormFit later still recognizes the same person; this just
+// leaves the chat view without losing anything.
+chatBackBtn.addEventListener("click", () => showScreen(screenHome));
+
+function enterChat(userId, greeting) {
+  currentUserId = userId;
+  localStorage.setItem("formfit_user_id", userId);
+  showScreen(screenChat);
+  chatThread.innerHTML = "";
+
+  const history = loadChatHistory(userId);
+  if (history.length > 0) {
+    // Resuming (refresh, or a returning visit) — replay what was actually
+    // said instead of restarting with a fresh greeting that would either
+    // repeat itself or clash with what's already in the thread.
+    replayChatHistory(history);
+  } else {
+    appendMessage("bot", greeting);
+    logChatMessage(userId, { type: "text", role: "bot", text: greeting });
+  }
+
+  loadEquipmentStrip();
+  chatInput.focus();
+}
+
+// Both the "yes that's me" returning-user path above and scan.html's
+// post-scan handoff (Zone 3: ?user_id=...&from=scan) land straight in
+// chat. Checked once at page load, before anything else renders.
+(function handleArrivalParams() {
+  const params = new URLSearchParams(window.location.search);
+  const arrivingUserId = params.get("user_id");
+  const fromScan = params.get("from") === "scan";
+  const wantsChat = params.get("chat") === "1";
+
+  if (arrivingUserId && (fromScan || wantsChat)) {
+    const greeting = fromScan
+      ? `Thanks for scanning, ${arrivingUserId}! Tell me which machine you're at (or tap one below) and I'll get you set up.`
+      : `Welcome back, ${arrivingUserId}! Tell me which machine you're at (or tap one below) and I'll get you set up.`;
+    enterChat(arrivingUserId, greeting);
+    return;
+  }
+
+  const savedUserId = localStorage.getItem("formfit_user_id");
+  if (savedUserId) {
+    // A known user on this device — straight into chat, no "is this you?"
+    // re-confirmation and no re-typing a name. History replay in enterChat
+    // takes over from here; this fallback greeting only shows if that
+    // history is somehow empty.
+    enterChat(savedUserId, "Welcome back!");
+    return;
+  }
+
+  showScreen(screenHome);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>FormFit scan — Zone 1-3 test harness (NOT the product frontend)</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; background: #111; color: #eee; }
+  .wrap { display: flex; gap: 16px; flex-wrap: wrap; }
+  .video-box { position: relative; width: 480px; max-width: 100%; }
+  video, canvas { width: 100%; border-radius: 8px; }
+  canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+  #status { font-size: 18px; font-weight: bold; padding: 8px; border-radius: 6px; background: #222; }
+  #status.ready { background: #1a5; }
+  .controls { display: flex; flex-direction: column; gap: 8px; min-width: 280px; }
+  button { padding: 8px 12px; cursor: pointer; }
+  pre { background: #000; color: #7f7; padding: 10px; border-radius: 6px; max-width: 480px; overflow: auto; }
+  label { display: block; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h2>FormFit scan — Zone 1-3 test harness</h2>
+<p>Scratch debug page, not <code>frontend.html</code> — verifies MediaPipe
+integration + quality gates + measurement math actually work together in a
+real browser. Must be served over <code>http://localhost</code> (camera
+access needs a secure context) — e.g. <code>python3 -m http.server</code>
+from the project root, then open
+<code>http://localhost:8000/scan/test_harness.html</code>.</p>
+
+<div class="wrap">
+  <div class="video-box">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="controls">
+    <label>Height (cm): <input id="heightCm" type="number" value="178" /></label>
+
+    <label>Camera:
+      <select id="facingMode">
+        <option value="environment">Rear (default, more accurate)</option>
+        <option value="user">Front</option>
+      </select>
+    </label>
+    <button id="startBtn">Start camera</button>
+
+    <div style="background: #1a1a2e; padding: 10px; border-radius: 6px;">
+      <div id="flowProgress" style="font-size: 12px; color: #888;"></div>
+      <div id="flowTitle" style="font-size: 16px; font-weight: bold;"></div>
+      <div id="flowBody" style="font-size: 13px; color: #ccc;"></div>
+    </div>
+
+    <div id="status">Camera not started</div>
+    <div id="debugRatio" style="font-size: 13px; color: #888;"></div>
+
+    <p style="font-size: 13px; color: #aaa;">Side-profile detection uses
+    the 2D shoulder-separation ratio (low = side, confirmed ~0.044 on a
+    real side-profile capture vs. ~1.14 for front) — auto-capture should
+    work hands-free, same as front. The manual button below is only a
+    fallback if auto still doesn't fire — it captures immediately
+    regardless and logs the same diagnostics.</p>
+    <button id="captureBtn" disabled>Capture current pose now (manual override)</button>
+
+    <label>Redo an already-captured pose:
+      <select id="redoSelect"><option value="">(none captured yet)</option></select>
+    </label>
+    <button id="redoBtn" disabled>Redo selected pose</button>
+    <div id="captureLog"></div>
+
+    <button id="computeBtn">Compute all 7 measurements from captured poses</button>
+    <pre id="output">(no measurements computed yet)</pre>
+  </div>
+</div>
+
+<script type="module">
+import { POSE_LANDMARK, computeCalibrationFactor, computeFrontMeasurementsMm, computeSittingHeightMm, computeChestDepthMm } from "./measurements.mjs";
+import { evaluateCaptureQuality, averageLandmarksOverWindow, estimateFacingRotationRatio, estimateProfileVisibilityAsymmetry, estimateFramingIssue } from "./quality_gates.mjs";
+import { detectPoseInVideoFrame, maskToPlainData, estimateAverageLuminance, startCamera, stopCamera } from "./mediapipe_runner.mjs";
+import { createCaptureFlow, currentPoseKind, isFlowComplete, progressText, currentInstructions, advanceAfterCapture, requestRedo } from "./capture_flow.mjs";
+import { PoseLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs";
+
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const ctx = overlay.getContext("2d");
+const statusEl = document.getElementById("status");
+const debugRatioEl = document.getElementById("debugRatio");
+const startBtn = document.getElementById("startBtn");
+const captureBtn = document.getElementById("captureBtn");
+const redoSelect = document.getElementById("redoSelect");
+const redoBtn = document.getElementById("redoBtn");
+const computeBtn = document.getElementById("computeBtn");
+const captureLog = document.getElementById("captureLog");
+const output = document.getElementById("output");
+const flowProgressEl = document.getElementById("flowProgress");
+const flowTitleEl = document.getElementById("flowTitle");
+const flowBodyEl = document.getElementById("flowBody");
+const heightCmInput = document.getElementById("heightCm");
+
+// Zone 4: sequences front -> side_standing -> side_seated automatically —
+// no more manual pose-kind dropdown. See scan/capture_flow.mjs.
+let flow = createCaptureFlow();
+
+function renderFlow() {
+  flowProgressEl.textContent = `Step ${progressText(flow)}`;
+  if (isFlowComplete(flow)) {
+    flowTitleEl.textContent = "All three poses captured";
+    flowBodyEl.textContent = "Press Compute below, or pick a pose on the right to redo it.";
+    captureBtn.disabled = true;
+  } else {
+    const instructions = currentInstructions(flow);
+    flowTitleEl.textContent = instructions.title;
+    flowBodyEl.textContent = instructions.body;
+    captureBtn.disabled = !cameraStream;
+  }
+  redoSelect.innerHTML = "";
+  if (flow.completedPoseKinds.size === 0) {
+    redoSelect.appendChild(new Option("(none captured yet)", ""));
+    redoBtn.disabled = true;
+  } else {
+    redoSelect.appendChild(new Option("Choose a pose to redo...", ""));
+    for (const poseKind of flow.completedPoseKinds) {
+      redoSelect.appendChild(new Option(poseKind, poseKind));
+    }
+    redoBtn.disabled = false;
+  }
+}
+
+const RECENT_FRAMES_WINDOW = 15; // ~0.5-1s at typical webcam framerates — used only for the jitter/stability check, kept short so it reacts quickly to real movement
+let recentLandmarkFrames = [];
+let recentWorldFrames = [];
+let latestDetection = null;
+let cameraStream = null;
+renderFlow(); // needs cameraStream to exist first, to gate captureBtn correctly
+
+// Separate, longer-lived accumulation for the actual capture average:
+// every frame collected during the *entire* ready streak (the full
+// COUNTDOWN_MS hold, not just the short jitter window above) — at ~30fps
+// over a 3s countdown that's ~90 frames, matching the "average over many
+// frames across a few seconds" fix requested after reviewing real scan
+// output. Reset whenever the streak breaks or a capture fires.
+let heldLandmarkFrames = [];
+let heldWorldFrames = [];
+
+// Captured poses: { front: {landmarks, worldLandmarks}, side_standing: {..., maskData}, side_seated: {...} }
+// `flow.completedPoseKinds` (scan/capture_flow.mjs) is the single source of
+// truth for which poses are done — no separate tracking Set needed here.
+const captures = { front: null, side_standing: null, side_seated: null };
+
+// Auto-capture: once quality.ready holds continuously for COUNTDOWN_MS, fire
+// automatically — no button to reach, since the whole point of standing
+// back / turning sideways is that you can't physically press anything.
+// Mirrors the product decision (3-2-1 beep countdown, no manual shutter).
+const COUNTDOWN_MS = 3000;
+// Tolerate brief single-frame quality blips (natural micro-movement, a
+// glitchy frame) without restarting the whole countdown from zero — only a
+// genuinely sustained drop resets it. Without this, one bad frame anywhere
+// in a 3-second window made the countdown feel like it "never" completed.
+const READY_GRACE_MS = 400;
+let readySinceMs = null;
+let lastReadyMs = null;
+let lastCountdownBeepSecond = null;
+
+let audioCtx = null;
+function beep(freq, durationMs) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.frequency.value = freq;
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+  osc.start();
+  osc.stop(audioCtx.currentTime + durationMs / 1000);
+}
+
+// Full diagnostic string: rotation ratio (geometry-based, current gate)
+// plus visibility asymmetry + raw per-joint visibility (occlusion-based,
+// diagnostic only per quality_gates.mjs) — shown live and logged at
+// capture time, so a side-profile attempt yields real numbers for both
+// candidate signals regardless of which one the gate is actually using.
+function diagnosticsText(landmarks, poseKind) {
+  const L = POSE_LANDMARK;
+  const ratio = estimateFacingRotationRatio(landmarks);
+  const asymmetry = estimateProfileVisibilityAsymmetry(landmarks);
+  const ls = landmarks[L.LEFT_SHOULDER].visibility;
+  const rs = landmarks[L.RIGHT_SHOULDER].visibility;
+  const lh = landmarks[L.LEFT_HIP].visibility;
+  const rh = landmarks[L.RIGHT_HIP].visibility;
+  const hipMidY = (landmarks[L.LEFT_HIP].y + landmarks[L.RIGHT_HIP].y) / 2;
+  const noseHipExtent = Math.abs(hipMidY - landmarks[L.NOSE].y);
+  const heelMidY = Math.max(landmarks[L.LEFT_HEEL].y, landmarks[L.RIGHT_HEEL].y);
+  const noseHeelExtent = Math.abs(heelMidY - landmarks[L.NOSE].y);
+  const framingCode = estimateFramingIssue(landmarks, poseKind) || "ok";
+  return `ratio=${ratio.toFixed(3)} asymmetry=${asymmetry.toFixed(3)} | shoulder vis L=${ls.toFixed(2)} R=${rs.toFixed(2)} | hip vis L=${lh.toFixed(2)} R=${rh.toFixed(2)} | framing=${framingCode} noseHipExt=${noseHipExtent.toFixed(3)} noseHeelExt=${noseHeelExtent.toFixed(3)}`;
+}
+
+function performCapture(poseKind, detection, framesWindow, worldFramesWindow) {
+  const averagedLandmarks = averageLandmarksOverWindow(framesWindow);
+  const averagedWorld = averageLandmarksOverWindow(worldFramesWindow);
+  const entry = { landmarks: averagedLandmarks, worldLandmarks: averagedWorld };
+  if (poseKind === "side_standing" && detection.segmentationMask) {
+    entry.maskData = maskToPlainData(detection.segmentationMask);
+  }
+  captures[poseKind] = entry;
+  flow = advanceAfterCapture(flow, poseKind);
+  renderFlow();
+  // Diagnostics recorded here so they're readable *after* the fact — no
+  // need to read live numbers while mid-turn, which is exactly what made
+  // the side-profile threshold hard to diagnose the first few rounds.
+  captureLog.textContent = `Captured: ${poseKind} (averaged over ${framesWindow.length} frames)\n${diagnosticsText(detection.landmarks, poseKind)}`;
+  beep(1320, 200); // final capture tone — higher pitch than the countdown beeps
+}
+
+startBtn.addEventListener("click", async () => {
+  if (cameraStream) stopCamera(cameraStream);
+  statusEl.textContent = "Starting camera...";
+  try {
+    // Must be created/resumed from a user gesture (this click) — browsers
+    // block audio otherwise, and the countdown beeps fire later from inside
+    // the detection loop, which isn't itself a user gesture.
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+
+    cameraStream = await startCamera(video, document.getElementById("facingMode").value);
+    overlay.width = video.videoWidth || 1280;
+    overlay.height = video.videoHeight || 720;
+    renderFlow();
+    requestAnimationFrame(loop);
+  } catch (err) {
+    statusEl.textContent = `Camera error: ${err.message}`;
+  }
+});
+
+function drawSkeleton(landmarks) {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  ctx.strokeStyle = "#0f0";
+  ctx.lineWidth = 2;
+  for (const conn of PoseLandmarker.POSE_CONNECTIONS) {
+    const a = landmarks[conn.start];
+    const b = landmarks[conn.end];
+    ctx.beginPath();
+    ctx.moveTo(a.x * overlay.width, a.y * overlay.height);
+    ctx.lineTo(b.x * overlay.width, b.y * overlay.height);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#f00";
+  for (const lm of landmarks) {
+    ctx.beginPath();
+    ctx.arc(lm.x * overlay.width, lm.y * overlay.height, 3, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+}
+
+async function loop(timestampMs) {
+  if (!cameraStream) return;
+  const detection = await detectPoseInVideoFrame(video, timestampMs);
+
+  if (!detection) {
+    statusEl.textContent = "No person detected";
+    statusEl.className = "";
+    latestDetection = null;
+  } else {
+    latestDetection = detection;
+    drawSkeleton(detection.landmarks);
+
+    recentLandmarkFrames.push(detection.landmarks);
+    recentWorldFrames.push(detection.worldLandmarks);
+    if (recentLandmarkFrames.length > RECENT_FRAMES_WINDOW) recentLandmarkFrames.shift();
+    if (recentWorldFrames.length > RECENT_FRAMES_WINDOW) recentWorldFrames.shift();
+
+    const poseKind = currentPoseKind(flow);
+    if (poseKind === null) {
+      // Whole sequence done — nothing left to gate on, just idle here.
+      // Zone 6 (confirmation screen) will replace this with a real next
+      // step; for now the existing Compute button below still works.
+      statusEl.textContent = "All three poses captured — press Compute, or pick a pose to redo.";
+      statusEl.className = "ready";
+      requestAnimationFrame(loop);
+      return;
+    }
+    const quality = evaluateCaptureQuality({
+      landmarks: detection.landmarks,
+      averageLuminance01: estimateAverageLuminance(video),
+      poseKind,
+      recentFramesLandmarks: recentLandmarkFrames,
+    });
+
+    // Debug readout — live diagnostics for both candidate rotation signals
+    // (see diagnosticsText above) so a real side-profile attempt yields
+    // real numbers instead of guessing at thresholds again.
+    debugRatioEl.textContent = `${diagnosticsText(detection.landmarks, poseKind)} | pose: ${poseKind}`;
+
+    const enoughFrames = recentLandmarkFrames.length >= RECENT_FRAMES_WINDOW;
+    if (quality.ready && enoughFrames) {
+      lastReadyMs = timestampMs;
+      if (readySinceMs === null) {
+        readySinceMs = timestampMs;
+        lastCountdownBeepSecond = null;
+        heldLandmarkFrames = [];
+        heldWorldFrames = [];
+      }
+      heldLandmarkFrames.push(detection.landmarks);
+      heldWorldFrames.push(detection.worldLandmarks);
+      const elapsed = timestampMs - readySinceMs;
+      if (elapsed < COUNTDOWN_MS) {
+        const secondsLeft = Math.ceil((COUNTDOWN_MS - elapsed) / 1000);
+        if (secondsLeft !== lastCountdownBeepSecond) {
+          lastCountdownBeepSecond = secondsLeft;
+          beep(660, 100);
+        }
+        statusEl.textContent = `READY — hold still... ${secondsLeft}`;
+        statusEl.className = "ready";
+      } else {
+        // Average over the whole held streak (~90 frames at 30fps over the
+        // 3s countdown), not just the short jitter window — reduces
+        // per-frame landmark noise a lot more than the previous approach.
+        performCapture(poseKind, detection, heldLandmarkFrames.slice(), heldWorldFrames.slice());
+        readySinceMs = null;
+        heldLandmarkFrames = [];
+        heldWorldFrames = [];
+        statusEl.textContent = `Captured ${poseKind}! Moving to next pose...`;
+        statusEl.className = "ready";
+      }
+    } else if (readySinceMs !== null && lastReadyMs !== null && timestampMs - lastReadyMs <= READY_GRACE_MS) {
+      // Brief blip — keep the countdown (and held-frame accumulation)
+      // running, just don't advance it or record this bad frame.
+      statusEl.textContent = `READY — hold still... (${quality.message || "brief glitch"})`;
+      statusEl.className = "ready";
+    } else {
+      readySinceMs = null;
+      lastReadyMs = null;
+      lastCountdownBeepSecond = null;
+      heldLandmarkFrames = [];
+      heldWorldFrames = [];
+      statusEl.textContent = quality.message || "Not enough stable frames yet";
+      statusEl.className = "";
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+captureBtn.addEventListener("click", () => {
+  const poseKind = currentPoseKind(flow);
+  if (!poseKind) return; // flow already complete, button should be disabled anyway
+  if (!latestDetection || recentLandmarkFrames.length < RECENT_FRAMES_WINDOW) {
+    captureLog.textContent = "Not enough stable frames yet — wait for READY.";
+    return;
+  }
+  performCapture(poseKind, latestDetection, recentLandmarkFrames.slice(), recentWorldFrames.slice());
+});
+
+redoBtn.addEventListener("click", () => {
+  const poseKind = redoSelect.value;
+  if (!poseKind) return;
+  flow = requestRedo(flow, poseKind);
+  captures[poseKind] = null;
+  readySinceMs = null;
+  heldLandmarkFrames = [];
+  heldWorldFrames = [];
+  captureLog.textContent = `Redo — ${poseKind} can be captured again.`;
+  renderFlow();
+});
+
+computeBtn.onclick = () => {
+  try {
+    if (!captures.front) throw new Error("front-standing not captured yet");
+    const heightMm = Number(heightCmInput.value) * 10;
+    const calibrationFactor = computeCalibrationFactor(captures.front.worldLandmarks, heightMm);
+    const front = computeFrontMeasurementsMm(captures.front.worldLandmarks, calibrationFactor);
+
+    const result = { calibrationFactor, height_H_mm: heightMm, ...front };
+
+    if (captures.side_seated) {
+      result.sitting_height_T_mm = computeSittingHeightMm(captures.side_seated.worldLandmarks, calibrationFactor);
+    } else {
+      result.sitting_height_T_mm = "(side_seated not captured yet)";
+    }
+
+    if (captures.side_standing && captures.side_standing.maskData) {
+      result.chest_depth_Cd_mm = computeChestDepthMm(
+        {
+          worldLandmarks: captures.side_standing.worldLandmarks,
+          normalizedLandmarks: captures.side_standing.landmarks,
+          ...captures.side_standing.maskData,
+        },
+        calibrationFactor,
+      );
+    } else {
+      result.chest_depth_Cd_mm = "(side_standing not captured yet)";
+    }
+
+    output.textContent = JSON.stringify(result, null, 2);
+  } catch (err) {
+    output.textContent = `Error: ${err.message}`;
+  }
+};
+</script>
+</body>
+</html>

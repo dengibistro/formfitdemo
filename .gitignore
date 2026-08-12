@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Claude Code local config — personal dev-tool settings, not app config.
+# .mcp.json specifically contains this project's live Supabase project_ref.
+.claude/settings.local.json
+.mcp.json
+
+# Internal dev diary — written for future Claude Code sessions, not public
+# docs; contains live infra identifiers (Supabase project ref, a real
+# ngrok domain tied to this account).
+PRODUCT_ROADMAP_NOTES.md
+
+# Matrix's own product photos (from their official site) — not ours to
+# redistribute in a public repo. Only the images are ignored, not the
+# directory itself: api.py mounts machine_photos/ via StaticFiles, which
+# raises at startup if the directory doesn't exist at all — .gitkeep below
+# keeps the (now photo-less) directory real after a fresh clone.
+# frontend.html's picker falls back to an icon tile if a photo 404s.
+# Replace with your own gym photos before a real public deploy.
+machine_photos/*.png
+!machine_photos/.gitkeep
+
+# Secrets — never committed, always exported in your own shell
+# (GEMINI_API_KEY, SUPABASE_URL, SUPABASE_KEY, ADMIN_USER, ADMIN_PASSWORD)
+.env
+.env.*
