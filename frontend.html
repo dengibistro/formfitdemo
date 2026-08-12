@@ -717,19 +717,21 @@ const MACHINE_INFO = {
   leg_press: { label: "Leg Press" },
 };
 
-// Real Matrix product photos (from Matrix's official site, see
-// machine_photos/ + api.py's /machine_photos static mount) for the 5
+// Real Matrix product photos (from Matrix's official site) for the 5
 // machines the live assistant actually supports — used by the full-screen
 // picker so someone who doesn't know a machine by name can recognise it.
-// leg_press/leg_curl/leg_extension deliberately have no entry here (no
-// photos exist yet) — the picker falls back to an icon placeholder tile
-// for those, still tappable, still routes to the "not available yet" reply.
+// Served from Supabase Storage (public "machine-photos" bucket, uploaded
+// via upload_machine_photos.py), not this repo — these are Matrix's own
+// photos, not ours to redistribute in a public GitHub repo, so they never
+// touch git; a missing/failed load here still falls back to an icon tile
+// (see renderPickerGrid's onerror). leg_press/leg_curl/leg_extension
+// deliberately have no entry (no photos exist yet).
 const MACHINE_PHOTOS = {
-  chest_press: "/machine_photos/chest_press.png",
-  shoulder_press: "/machine_photos/shoulder_press.png",
-  lat_pulldown: "/machine_photos/lat_pulldown.png",
-  pec_deck: "/machine_photos/pec_deck.png",
-  seated_row: "/machine_photos/seated_row.png",
+  chest_press: "https://qeorztugpvicrjacwykd.supabase.co/storage/v1/object/public/machine-photos/chest_press.png",
+  shoulder_press: "https://qeorztugpvicrjacwykd.supabase.co/storage/v1/object/public/machine-photos/shoulder_press.png",
+  lat_pulldown: "https://qeorztugpvicrjacwykd.supabase.co/storage/v1/object/public/machine-photos/lat_pulldown.png",
+  pec_deck: "https://qeorztugpvicrjacwykd.supabase.co/storage/v1/object/public/machine-photos/pec_deck.png",
+  seated_row: "https://qeorztugpvicrjacwykd.supabase.co/storage/v1/object/public/machine-photos/seated_row.png",
 };
 
 // Matches api.py's _UNSUPPORTED_MACHINES — these chips/tiles still tap

@@ -121,13 +121,12 @@ app.add_middleware(
 # uvicorn was launched from.
 app.mount("/scan", StaticFiles(directory=Path(__file__).parent / "scan"), name="scan")
 
-# Real Matrix-machine product photos (from Matrix's official site, resized
-# to 640px) for the chat's full-screen equipment picker — same "one process
-# serves everything" static-mount pattern as /scan above. Only the 5
-# machines the live assistant actually supports have a photo; leg_press/
-# leg_curl/leg_extension stay icon-only in the picker (see frontend.html's
-# MACHINE_PHOTOS map) since no photos exist for them yet.
-app.mount("/machine_photos", StaticFiles(directory=Path(__file__).parent / "machine_photos"), name="machine_photos")
+# No local /machine_photos static mount — those photos (Matrix's own, from
+# their official site) live in Supabase Storage instead (public
+# "machine-photos" bucket, see upload_machine_photos.py and frontend.html's
+# MACHINE_PHOTOS), served straight from Supabase's CDN to the browser, not
+# through this server at all. Keeps them out of the public GitHub repo
+# without needing this process to know anything about them.
 
 # ---------------------------------------------------------------------------
 # Frame constants — properties of the physical machines in a gym, not user

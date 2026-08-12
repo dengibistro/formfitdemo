@@ -16,14 +16,12 @@ __pycache__/
 PRODUCT_ROADMAP_NOTES.md
 
 # Matrix's own product photos (from their official site) — not ours to
-# redistribute in a public repo. Only the images are ignored, not the
-# directory itself: api.py mounts machine_photos/ via StaticFiles, which
-# raises at startup if the directory doesn't exist at all — .gitkeep below
-# keeps the (now photo-less) directory real after a fresh clone.
-# frontend.html's picker falls back to an icon tile if a photo 404s.
-# Replace with your own gym photos before a real public deploy.
-machine_photos/*.png
-!machine_photos/.gitkeep
+# redistribute in a public repo. Live in Supabase Storage instead (see
+# upload_machine_photos.py + frontend.html's MACHINE_PHOTOS), so api.py no
+# longer serves this directory at all — nothing here needs to exist for
+# the app to run, this is just local scratch space for re-running the
+# upload script if a photo changes.
+machine_photos/
 
 # Secrets — never committed, always exported in your own shell
 # (GEMINI_API_KEY, SUPABASE_URL, SUPABASE_KEY, ADMIN_USER, ADMIN_PASSWORD)
