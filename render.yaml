@@ -1,0 +1,25 @@
+# Render Blueprint — lets Render auto-configure the service when you
+# connect this repo (Dashboard → New → Blueprint), instead of typing the
+# build/start commands and env var names by hand. `sync: false` means
+# Render prompts you for each value in its own dashboard rather than
+# expecting it in this file — none of these are ever committed to git,
+# same convention as the local `export` workflow (see storage.py/
+# machines/ai_narration_gemini.py's own docstrings).
+services:
+  - type: web
+    name: formfit
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: ADMIN_USER
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
