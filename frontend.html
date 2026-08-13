@@ -209,7 +209,9 @@
   .chat-header-identity { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
   .chat-avatar {
     width: 38px; height: 38px; border-radius: 10px; background: hsl(0 0% 100% / .15);
-    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    font-family: "Barlow Condensed", Inter, sans-serif; font-weight: 700; font-size: 15px;
+    letter-spacing: -0.03em; color: white;
   }
   .chat-title { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 17px; font-weight: 700; text-transform: uppercase; }
   .chat-subtitle { font-size: 12px; color: hsl(0 0% 100% / .8); }
@@ -478,7 +480,7 @@
     <p>Enter your name to get started — this is how we'll find your saved
     measurements next time.</p>
     <label class="field">Your name
-      <input id="nameInput" type="text" placeholder="e.g. yaroslav" />
+      <input id="nameInput" type="text" placeholder="e.g. Jake" />
     </label>
     <button id="nameContinueBtn">Continue</button>
     <div id="nameError" class="status-banner" hidden></div>
@@ -506,7 +508,7 @@
     <header class="chat-header">
       <button id="chatBackBtn" class="chat-back-btn" type="button" aria-label="Back to home">←</button>
       <div class="chat-header-identity">
-        <div class="chat-avatar">💪</div>
+        <div class="chat-avatar">FF</div>
         <div>
           <div class="chat-title">FormFit</div>
           <div class="chat-subtitle">Your setup assistant</div>
