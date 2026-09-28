@@ -32,6 +32,7 @@ call to Google).
 from google import genai
 
 import storage
+from machines.coaching import Coaching
 from machines.explanations import ExplanationFacts
 from machines.narration_common import SYSTEM_PROMPT, setup_context_message, strip_dashes
 
@@ -90,10 +91,12 @@ def narrate_setup(
     user_id: str,
     facts: list[ExplanationFacts],
     just_finished_machine: str | None = None,
+    coaching: Coaching | None = None,
 ) -> str:
     """Narrate one or more axis results for a machine setup, continuing the
-    ongoing conversation with this user."""
-    return _call_gemini(user_id, setup_context_message(facts, just_finished_machine))
+    ongoing conversation with this user. `coaching` is the approved
+    tips/avoids the reply's TIPS/AVOID must rephrase."""
+    return _call_gemini(user_id, setup_context_message(facts, just_finished_machine, coaching))
 
 
 def chat(user_id: str, user_message: str) -> str:

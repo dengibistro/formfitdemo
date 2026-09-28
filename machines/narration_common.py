@@ -9,6 +9,7 @@ enforced by the wording of `SYSTEM_PROMPT`, not by either provider's code.
 
 import re
 
+from machines.coaching import Coaching
 from machines.explanations import ExplanationFacts
 
 # Plain-language statement of which physical extreme a clamp verdict landed
@@ -36,12 +37,10 @@ Hard rules:
 1. Only state facts that are in the data. Never invent or guess a joint \
 angle, a measurement, or a biomechanical claim you weren't given. If the \
 facts don't explain something, say so plainly instead of filling the gap.
-2. For an "in_range" verdict: confirm it briefly, then give one short \
-technique cue and one thing to watch for on that exercise.
+2. For an "in_range" verdict: confirm it briefly.
 3. For a "clamped_low", "clamped_high" or "clamped_by_coupling" verdict: \
 explain why, using the specific body measurement and gap you were given. Say \
-which position was set as the best option and what that means for today's \
-session. Frame it as the machine's limit for their proportions, never as \
+which position was set as the best option. Frame it as the machine's limit for their proportions, never as \
 something wrong with their body.
 4. For a "no_solution" or "no_solution_by_coupling" verdict: be honest that \
 this machine can't be set up safely for them right now. Say the machine \
@@ -60,8 +59,8 @@ replies started with "Nice work on...", pick something else.
 "causing_segment". Put them in plain words.
 7b. If a fact block has an "alternative pin" line, give both pins and \
 include its "cue for the user" so they can check which one fits in person. \
-Any "cue for the user" line has to appear in your reply (in WHY or TIPS). \
-It's a concrete instruction from the engine, not optional.
+Any "cue for the user" line has to appear in your WHY line. It's a \
+concrete instruction from the engine, not optional.
 8. The pin number alone does NOT tell you whether it's the machine's high or \
 low end, because different machines number their holes in opposite \
 directions. Only trust the explicit "this IS the machine's MAXIMUM/MINIMUM" \
@@ -74,16 +73,24 @@ three lines, with nothing before, between or after them and no other \
 headings:
 WHY: <your explanation in a friendly trainer voice, covering every axis you \
 were given. A couple of sentences is fine, but keep it on this one line (no \
-line breaks inside it)>
-TIPS: <technique cue 1>|<technique cue 2>
-AVOID: <thing to avoid 1>|<thing to avoid 2>
-Separate items in TIPS and AVOID with "|". Two items is normal, never more \
-than three. Every facts-narration reply needs all three lines, even for a \
-"no_solution" verdict (then TIPS and AVOID can be general safety advice).
+line breaks inside it). No technique advice here, that's what TIPS is for>
+TIPS: <approved tip 1>|<approved tip 2>
+AVOID: <approved avoid 1>|<approved avoid 2>
+TIPS and AVOID come ONLY from the "APPROVED TIPS" and "APPROVED AVOID" \
+lists in the message: the same number of items, in the same order, each one \
+rephrased in your own words with exactly the same meaning. Don't add, drop, \
+merge, soften or extend any item. Separate items with "|".
 10. Write like a real person texting. Never use em dashes or en dashes \
 between words; use a period, a comma or a colon instead. Skip filler like \
 "Great question", "Absolutely", "Let's dive in" or "I hope this helps". \
 Plain words, short sentences.
+11. Technique and safety advice ONLY comes from approved notes: the \
+approved tips and avoids you were given in this conversation, or \
+"approved technique notes" attached to a message. In follow-up chat, if a \
+question about technique, sets, reps, weight or exercise choice isn't \
+covered by those notes, say honestly that it's a good one for a coach and \
+don't answer it yourself. If they mention pain or an injury, tell them to \
+stop that exercise and check with a coach.
 """
 
 
@@ -120,7 +127,10 @@ def facts_to_context_block(facts: ExplanationFacts) -> str:
         lines.append(f"driven by body measurement: {facts.causing_segment}")
 
     extreme = _EXTREME_BY_VERDICT.get(facts.verdict.value)
-    if extreme:
+    if extreme and facts.achieved_pin is None:
+        # Fixed hardware (e.g. Shoulder Press grip): nothing to set, so no "maximum setting".
+        lines.append("this part is FIXED and can't be adjusted; the gap below is how far it is from ideal for this body")
+    elif extreme:
         lines.append(extreme)
 
     if facts.residual_mm is not None:
@@ -150,13 +160,55 @@ def facts_to_context_block(facts: ExplanationFacts) -> str:
     return "\n".join(lines)
 
 
-def setup_context_message(facts: list[ExplanationFacts], just_finished_machine: str | None = None) -> str:
-    """The full user-turn text for narrating one or more axis results —
-    shared verbatim by both provider backends."""
+def setup_context_message(
+    facts: list[ExplanationFacts],
+    just_finished_machine: str | None = None,
+    coaching: Coaching | None = None,
+) -> str:
+    """The full user-turn text for narrating one or more axis results,
+    shared verbatim by both provider backends. `coaching` is the approved
+    tips/avoids for TIPS and AVOID (machines/coaching.py's select_coaching)."""
     parts = []
     if just_finished_machine:
         parts.append(f"The user just finished: {just_finished_machine}.")
     parts.append("New machine setup facts:")
     for f in facts:
         parts.append("---\n" + facts_to_context_block(f))
+    if coaching is not None:
+        parts.append("---\nAPPROVED TIPS (rephrase each, same meaning, same order):")
+        parts.extend(f"{i}. {t}" for i, t in enumerate(coaching.tips, 1))
+        parts.append("APPROVED AVOID (rephrase each, same meaning, same order):")
+        parts.extend(f"{i}. {a}" for i, a in enumerate(coaching.avoid, 1))
     return "\n".join(parts)
+
+
+def chat_message_with_notes(user_message: str, notes: str | None, machine_label: str | None) -> str:
+    """Free-form chat turn with the approved technique notes for the user's
+    last machine attached, so the model answers technique questions from
+    them (prompt rule 11) instead of from its own knowledge."""
+    if not notes:
+        return user_message
+    return f"(Approved technique notes for {machine_label}:\n{notes})\n\nUser: {user_message}"
+
+
+_LINE = re.compile(r"^(WHY|TIPS|AVOID):\s*(.*)$", re.M)
+
+
+def enforce_coaching(reply: str, coaching: Coaching) -> str:
+    """Make sure a setup reply's TIPS/AVOID are the approved ones. The model
+    is asked to rephrase them; if it returns the wrong number of items or
+    drops the lines, the approved text goes in verbatim instead. A reply
+    that ignored the WHY/TIPS/AVOID format entirely becomes the WHY line."""
+    found = {m.group(1): m.group(2).strip() for m in _LINE.finditer(reply)}
+    why = found.get("WHY") or " ".join(reply.split())
+
+    def items(key: str) -> list[str]:
+        return [x.strip() for x in found.get(key, "").split("|") if x.strip()]
+
+    tips = items("TIPS")
+    avoid = items("AVOID")
+    if len(tips) != len(coaching.tips):
+        tips = list(coaching.tips)
+    if len(avoid) != len(coaching.avoid):
+        avoid = list(coaching.avoid)
+    return f"WHY: {why}\nTIPS: {'|'.join(tips)}\nAVOID: {'|'.join(avoid)}"

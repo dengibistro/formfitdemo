@@ -108,9 +108,8 @@ class ShoulderPressResolution:
 def _resolve_grip(profile: AnthropometryProfile) -> AxisResolution:
     """Axis B — Grip width, FIXED (~520mm span). Not adjustable, so a
     mismatch against [BAW, 1.5·BAW] is reported as the frame's limit for
-    this body (CLAMPED) with a technique cue — narrow BAW -> handles wide
-    for them (keep elbows forward, don't flare); wide BAW -> handles narrow
-    for them (cramped, stop short if the shoulders pinch).
+    this body (CLAMPED). The matching technique advice (elbows forward /
+    stop short) lives in machines/coaching.py, keyed on this verdict.
 
     REVISED 2026-09-28: this used to return NO_SOLUTION ("machine doesn't
     fit you") on any mismatch. That's far too strong for a grip that only
@@ -132,15 +131,13 @@ def _resolve_grip(profile: AnthropometryProfile) -> AxisResolution:
         confidence_ratio(min(margin_to_min, margin_to_max), sigma_grip), CONFIDENCE_THRESHOLDS
     )
 
-    target_mm, cue = None, None
+    target_mm = None
     if FIXED_GRIP_SPAN_MM < min_grip_mm:
         state, target_mm = FeasibilityState.CLAMPED_LOW, min_grip_mm
         note = f"fixed {FIXED_GRIP_SPAN_MM:.0f}mm span is narrower than this user's shoulders ({min_grip_mm:.0f}mm)"
-        cue = "The handles are narrow for your shoulders: keep your elbows slightly in front of you and stop short if your shoulders pinch."
     elif FIXED_GRIP_SPAN_MM > max_grip_mm:
         state, target_mm = FeasibilityState.CLAMPED_HIGH, max_grip_mm
         note = f"fixed {FIXED_GRIP_SPAN_MM:.0f}mm span exceeds 1.5x this user's shoulder width ({max_grip_mm:.0f}mm)"
-        cue = "The handles are wide for your shoulders: keep your elbows slightly forward instead of flaring them out to the sides."
     else:
         state, note = FeasibilityState.IN_RANGE, None
 
@@ -154,7 +151,6 @@ def _resolve_grip(profile: AnthropometryProfile) -> AxisResolution:
         target_coordinate_mm=target_mm,
         causing_segment="BAW (biacromial width)",
         purpose=AxisPurpose.GRIP_WIDTH_SHOULDER_ABDUCTION,
-        user_cue=cue,
     )
 
 
@@ -285,7 +281,7 @@ if __name__ == "__main__":
     assert result_2.seat.confidence is ConfidenceTag.HIGH  # confidence-immune
 
     # --- Edge case 3: narrow-shouldered user with a Tier-3 lumbar injury ---
-    # Narrow BAW against the fixed 520mm span -> handles wide for them (grip CLAMPED_HIGH + cue);
+    # Narrow BAW against the fixed 520mm span -> handles wide for them (grip CLAMPED_HIGH);
     # lumbar Tier-3 -> partial-gate warning, not a full block.
     narrow_shoulders = AnthropometryProfile(
         user_id="narrow_shoulders",
@@ -313,8 +309,7 @@ if __name__ == "__main__":
     _show("Narrow-shouldered user (Tier-3 lumbar -> partial-gate warning)", result_3)
 
     assert result_3.machine_gated is False
-    assert result_3.grip.state is FeasibilityState.CLAMPED_HIGH  # a technique cue, not "doesn't fit"
-    assert result_3.grip.user_cue is not None and "elbows" in result_3.grip.user_cue
+    assert result_3.grip.state is FeasibilityState.CLAMPED_HIGH  # handled by a coaching tip, not "doesn't fit"
     assert len(result_3.warnings) == 1 and "partial gate" in result_3.warnings[0]
 
     print("\nAll machines/shoulder_press.py smoke tests passed.")

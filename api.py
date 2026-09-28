@@ -36,9 +36,11 @@ import storage
 from machines.ai_narration_gemini import chat as gemini_chat
 from machines.ai_narration_gemini import narrate_setup
 from machines.chest_press import resolve_chest_press
+from machines.coaching import COACHING, machine_notes, select_coaching
 from machines.common import AxisResolution
 from machines.explanations import ExplanationFacts, build_explanation_facts
 from machines.lat_pulldown import LatPulldownFrameConstants, resolve_lat_pulldown
+from machines.narration_common import chat_message_with_notes, enforce_coaching
 from machines.leg_curl import LegCurlFrameConstants, resolve_leg_curl
 from machines.leg_extension import resolve_leg_extension
 from machines.leg_press import CouplingConstants, LegPressFrameConstants, resolve_leg_press
@@ -304,6 +306,27 @@ _MACHINE_RESOLVERS = {
 }
 
 
+# MachineName value (what storage.get_last_machine returns) -> slug.
+_SLUG_BY_MACHINE_NAME = {machine_enum.value: slug for slug, (machine_enum, _) in _MACHINE_RESOLVERS.items()}
+
+
+def _narrate(user_id: str, machine: str, facts: list[ExplanationFacts]) -> str:
+    """Narrate a setup with the approved tips/avoids for this machine and
+    result (machines/coaching.py). The model only rephrases them;
+    enforce_coaching puts the approved text back if it doesn't."""
+    coaching = select_coaching(machine, facts) if machine in COACHING else None
+    narration = narrate_setup(user_id, facts, just_finished_machine=storage.get_last_machine(user_id), coaching=coaching)
+    return enforce_coaching(narration, coaching) if coaching else narration
+
+
+def _chat(user_id: str, message: str) -> str:
+    """Free-form chat, with the approved technique notes for the user's last
+    machine attached (prompt rule 11: technique advice only from those)."""
+    last_machine = storage.get_last_machine(user_id)
+    notes = machine_notes(_SLUG_BY_MACHINE_NAME.get(last_machine, "")) if last_machine else None
+    return gemini_chat(user_id, chat_message_with_notes(message, notes, last_machine))
+
+
 @app.post("/profiles")
 def create_profile(payload: ProfileIn) -> AnthropometryProfile:
     """Submit (or overwrite) a user's anthropometry profile — the body-scan
@@ -475,7 +498,7 @@ def assistant_message(user_id: str, body: AssistantMessage) -> AssistantReply:
         injuries = storage.get_injuries(user_id)
         resolution = resolver(profile, injuries, None)
         facts = _extract_facts(resolution, machine_enum.value)
-        narration = narrate_setup(user_id, facts, just_finished_machine=storage.get_last_machine(user_id))
+        narration = _narrate(user_id, machine, facts)
         storage.set_last_machine(user_id, machine_enum.value)
         storage.log_message(user_id, "bot", kind="machine_setup")
         return AssistantReply(kind="machine_setup", reply=narration, machine=machine, facts=facts)
@@ -488,7 +511,7 @@ def assistant_message(user_id: str, body: AssistantMessage) -> AssistantReply:
             reply=f"Which one did you mean, {friendly}?",
         )
 
-    reply = gemini_chat(user_id, body.message)
+    reply = _chat(user_id, body.message)
     storage.log_message(user_id, "bot", kind="chat")
     return AssistantReply(kind="chat", reply=reply)
 
@@ -532,7 +555,7 @@ def setup_machine(
     resolution = resolver(profile, injuries, leg_press_extras)
 
     facts = _extract_facts(resolution, machine_enum.value)
-    narration = narrate_setup(user_id, facts, just_finished_machine=storage.get_last_machine(user_id))
+    narration = _narrate(user_id, machine, facts)
     storage.set_last_machine(user_id, machine_enum.value)
 
     return SetupResponse(machine=machine_enum.value, facts=facts, narration=narration)
@@ -543,7 +566,7 @@ def chat_endpoint(user_id: str, body: ChatMessage) -> dict:
     """Free-form follow-up question, same ongoing narration session."""
     user_id = _normalize_user_id(user_id)
     _require_profile(user_id)
-    return {"reply": gemini_chat(user_id, body.message)}
+    return {"reply": _chat(user_id, body.message)}
 
 
 # ---------------------------------------------------------------------------
