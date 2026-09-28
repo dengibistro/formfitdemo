@@ -142,3 +142,29 @@ def test_stale_conversation_pointer_starts_fresh(monkeypatch, short_timeout, stu
     monkeypatch.setattr(gemini, "_get_client", lambda: _StrictClient())
     assert gemini.chat("tester", "hi") == "Sure, happy to help."
     assert calls == [True, False]  # tried the old chain, then a fresh one
+
+
+def test_calls_ask_for_minimal_thinking_and_a_timeout(monkeypatch, short_timeout, stub_storage):
+    """Gemini 3 thinks at a high level by default, which alone was enough to
+    time out every call. Every request must ask for minimal thinking and
+    carry its own timeout."""
+
+    class _Done:
+        status = "completed"
+        id = "i-1"
+        output_text = "ok"
+
+    seen = {}
+
+    class _Recording:
+        def create(self, **kwargs):
+            seen.update(kwargs)
+            return _Done()
+
+    class _RecordingClient:
+        interactions = _Recording()
+
+    monkeypatch.setattr(gemini, "_get_client", lambda: _RecordingClient())
+    gemini.chat("tester", "hi")
+    assert seen["generation_config"]["thinking_level"] == "minimal"
+    assert seen["timeout"] == gemini.GEMINI_TIMEOUT_SECONDS

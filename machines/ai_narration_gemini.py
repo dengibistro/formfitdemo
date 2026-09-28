@@ -72,7 +72,18 @@ MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
 # retries (up to 4, backing off up to 60s) can stretch a stuck call to minutes.
 # A real user sat on a spinner for ~5 minutes before a raw "Internal Server
 # Error" came back (2026-09-28).
-GEMINI_TIMEOUT_SECONDS = 20
+GEMINI_TIMEOUT_SECONDS = float(os.environ.get("GEMINI_TIMEOUT_SECONDS", "20"))
+
+# Gemini 3 models "think" before answering, at a high level by default, which
+# on this prompt was enough to blow past the 20s cap on every call (seen live
+# 2026-09-28: fallback cards with "error: timeout" even after the model
+# switch and with retries off). This job is rephrasing facts and approved
+# tips, not reasoning, so thinking is kept minimal. Override with
+# GEMINI_THINKING_LEVEL (minimal/low/medium/high) if a model rejects it.
+_GENERATION_CONFIG = {
+    "thinking_level": os.environ.get("GEMINI_THINKING_LEVEL", "minimal"),
+    "max_output_tokens": 800,  # replies are a few sentences
+}
 
 # The SDK retries failed calls by default (3 times, backing off up to a
 # minute), which turned rate-limit or overload errors into a silent 20s
@@ -128,6 +139,8 @@ def _call_gemini(user_id: str, user_text: str) -> str:
             model=MODEL,
             input=user_text,
             system_instruction=SYSTEM_PROMPT,
+            generation_config=_GENERATION_CONFIG,
+            timeout=GEMINI_TIMEOUT_SECONDS,
             **chain,
         )
         if interaction.status != "completed":
