@@ -181,7 +181,18 @@ export function isAlignmentOk(landmarks) {
 // diagnostic in test_harness.html, no longer used as a gate.
 // ---------------------------------------------------------------------------
 
-const MIN_FRONTAL_LATERAL_RATIO = 0.5; // must be at least this wide (relative to torso height) to count as "facing camera" — confirmed ~1.14 on a real frontal capture, comfortably clear
+// REVISED 2026-09-28: was 0.5, which real numbers from a live scan showed
+// was far too lenient. A real frontal capture confirmed ~1.14 (see below);
+// 0.5 corresponds to cos(theta) = 0.5/1.14 ≈ 0.44, i.e. it let a capture
+// through at roughly 64° off frontal. A user's own front-standing capture
+// (2026-09-28) read a real shoulder width 22% short of a tape measurement,
+// consistent with roughly 39° of rotation — this gate should have caught
+// it and didn't. 1.1 tolerates about 15° off frontal (cos(15°) ≈ 0.966,
+// 1.1/1.14 ≈ 0.965) before failing, which should still feel natural to
+// hold but catches anything that would meaningfully shrink shoulder/arm
+// width. Needs a real on-device check before the next demo: if this now
+// rejects an honestly-frontal capture too often, loosen it back down.
+const MIN_FRONTAL_LATERAL_RATIO = 1.1; // must be at least this wide (relative to torso height) to count as "facing camera" — confirmed ~1.14 on a real frontal capture, comfortably clear
 const MAX_SIDE_LATERAL_RATIO = 0.3; // must be at most this narrow to count as true side profile — confirmed ~0.044 on a real side-profile capture (2026-07-08), comfortably below; a ~45° half-turn would sit closer to ~0.8, comfortably above
 
 export function estimateFacingRotationRatio(landmarks) {
@@ -397,12 +408,15 @@ function buildGoodFrontLandmarks() {
   const L = POSE_LANDMARK;
   const arr = new Array(33).fill(null).map(() => lm(0.5, 0.5, 0));
   arr[L.NOSE] = lm(0.5, 0.1, 0);
-  arr[L.LEFT_SHOULDER] = lm(0.4, 0.25, 0);
-  arr[L.RIGHT_SHOULDER] = lm(0.6, 0.25, 0);
-  arr[L.LEFT_ELBOW] = lm(0.38, 0.4, 0);
-  arr[L.RIGHT_ELBOW] = lm(0.62, 0.4, 0);
-  arr[L.LEFT_WRIST] = lm(0.36, 0.55, 0);
-  arr[L.RIGHT_WRIST] = lm(0.64, 0.55, 0);
+  // Shoulder gap 0.34, torso height 0.30 -> ratio 1.133, matching the real
+  // ~1.14 reference a genuine frontal capture reads (see
+  // MIN_FRONTAL_LATERAL_RATIO's comment) rather than an arbitrary number.
+  arr[L.LEFT_SHOULDER] = lm(0.33, 0.25, 0);
+  arr[L.RIGHT_SHOULDER] = lm(0.67, 0.25, 0);
+  arr[L.LEFT_ELBOW] = lm(0.31, 0.4, 0);
+  arr[L.RIGHT_ELBOW] = lm(0.69, 0.4, 0);
+  arr[L.LEFT_WRIST] = lm(0.29, 0.55, 0);
+  arr[L.RIGHT_WRIST] = lm(0.71, 0.55, 0);
   arr[L.LEFT_HIP] = lm(0.45, 0.55, 0);
   arr[L.RIGHT_HIP] = lm(0.55, 0.55, 0);
   arr[L.LEFT_KNEE] = lm(0.44, 0.75, 0);
@@ -489,6 +503,19 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
   assertEqual(isRotationOk(good, POSE_KIND.SIDE_STANDING), false, "rotation (frontal, expect side)");
   assertEqual(isRotationOk(profile, POSE_KIND.SIDE_STANDING), true, "rotation (profile, expect side)");
   assertEqual(isRotationOk(profile, POSE_KIND.FRONT), false, "rotation (profile, expect front)");
+
+  // A real regression: a torso rotated ~30° off frontal used to pass the old
+  // 0.5 threshold (ratio here is ~0.98) and produced a shoulder width ~14%
+  // short. It must fail now.
+  const rotated30deg = buildGoodFrontLandmarks();
+  const cos30 = Math.cos((30 * Math.PI) / 180);
+  const shoulderMidX = (rotated30deg[L.LEFT_SHOULDER].x + rotated30deg[L.RIGHT_SHOULDER].x) / 2;
+  const halfGap = ((rotated30deg[L.RIGHT_SHOULDER].x - rotated30deg[L.LEFT_SHOULDER].x) / 2) * cos30;
+  rotated30deg[L.LEFT_SHOULDER] = lm(shoulderMidX - halfGap, 0.25, 0);
+  rotated30deg[L.RIGHT_SHOULDER] = lm(shoulderMidX + halfGap, 0.25, 0);
+  const rotatedRatio = estimateFacingRotationRatio(rotated30deg);
+  assertEqual(rotatedRatio > 0.5 && rotatedRatio < 1.1, true, `rotation (30deg fixture sanity, got ${rotatedRatio})`);
+  assertEqual(isRotationOk(rotated30deg, POSE_KIND.FRONT), false, "rotation (30deg off frontal, expect rejected)");
   console.log("rotation: OK");
 
   // --- Occlusion ---
