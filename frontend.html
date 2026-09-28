@@ -1001,12 +1001,13 @@ async function sendMessage(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: trimmed }),
     });
-    const body = await res.json();
+    // A crash or a proxy timeout can answer with plain text, not JSON.
+    const body = await res.json().catch(() => ({}));
     thinking.remove();
     if (!res.ok) {
       // Errors aren't saved to history. They stay loud on purpose so
       // testers report them right away.
-      appendMessage("bot", `Something went wrong: ${body.detail || res.statusText}`);
+      appendMessage("bot", `Something went wrong: ${body.detail || `the server returned an error (${res.status})`}`);
     } else if (body.kind === "rescan") {
       // Not saved and no thumbs: it's a prompt, not an answer.
       appendMessage("bot", body.reply);

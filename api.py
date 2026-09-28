@@ -33,8 +33,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import storage
+from machines.ai_narration_gemini import GeminiUnavailableError, narrate_setup
 from machines.ai_narration_gemini import chat as gemini_chat
-from machines.ai_narration_gemini import narrate_setup
 from machines.chest_press import resolve_chest_press
 from machines.coaching import COACHING, machine_notes, select_coaching
 from machines.common import AxisResolution
@@ -315,7 +315,15 @@ def _narrate(user_id: str, machine: str, facts: list[ExplanationFacts]) -> str:
     result (machines/coaching.py). The model only rephrases them;
     enforce_coaching puts the approved text back if it doesn't."""
     coaching = select_coaching(machine, facts) if machine in COACHING else None
-    narration = narrate_setup(user_id, facts, just_finished_machine=storage.get_last_machine(user_id), coaching=coaching)
+    try:
+        narration = narrate_setup(
+            user_id, facts, just_finished_machine=storage.get_last_machine(user_id), coaching=coaching
+        )
+    except GeminiUnavailableError as e:
+        # A 503 with a JSON `detail`, which the chat shows as "Something went
+        # wrong: ...", instead of an unhandled 500 whose plain-text body the
+        # frontend can't parse.
+        raise HTTPException(503, str(e)) from e
     return enforce_coaching(narration, coaching) if coaching else narration
 
 
@@ -324,7 +332,10 @@ def _chat(user_id: str, message: str) -> str:
     machine attached (prompt rule 11: technique advice only from those)."""
     last_machine = storage.get_last_machine(user_id)
     notes = machine_notes(_SLUG_BY_MACHINE_NAME.get(last_machine, "")) if last_machine else None
-    return gemini_chat(user_id, chat_message_with_notes(message, notes, last_machine))
+    try:
+        return gemini_chat(user_id, chat_message_with_notes(message, notes, last_machine))
+    except GeminiUnavailableError as e:
+        raise HTTPException(503, str(e)) from e
 
 
 @app.post("/profiles")

@@ -29,6 +29,8 @@ directory (requires `GEMINI_API_KEY` — free tier, but still a real network
 call to Google).
 """
 
+import concurrent.futures
+
 from google import genai
 
 import storage
@@ -53,6 +55,21 @@ MODEL = "gemini-3-flash-preview"
 # chats.create surface (see ai_narration.py's Claude backend for the
 # equivalent stable pattern), not chasing model names further.
 
+# Hard cap on one Gemini call, enforced here rather than through the SDK:
+# google-genai's own timeout option is unreliable (googleapis/python-genai#911,
+# it can hand timeout=None to httpx whatever you configure), and its automatic
+# retries (up to 4, backing off up to 60s) can stretch a stuck call to minutes.
+# A real user sat on a spinner for ~5 minutes before a raw "Internal Server
+# Error" came back (2026-09-28).
+GEMINI_TIMEOUT_SECONDS = 20
+
+
+class GeminiUnavailableError(Exception):
+    """The Gemini call timed out or failed. The message is safe to show to
+    the user; api.py turns it into a 503 the chat already knows how to
+    display, instead of a raw 500 the frontend can't parse."""
+
+
 _client: genai.Client | None = None
 
 
@@ -74,14 +91,33 @@ def _call_gemini(user_id: str, user_text: str) -> str:
     if last_interaction_id is not None:
         chain_kwargs["previous_interaction_id"] = last_interaction_id
 
-    interaction = _get_client().interactions.create(
-        model=MODEL,
-        input=user_text,
-        system_instruction=SYSTEM_PROMPT,
-        **chain_kwargs,
-    )
-    if interaction.status != "completed":
-        raise RuntimeError(f"Gemini interaction did not complete: status={interaction.status!r}")
+    def _create():
+        interaction = _get_client().interactions.create(
+            model=MODEL,
+            input=user_text,
+            system_instruction=SYSTEM_PROMPT,
+            **chain_kwargs,
+        )
+        if interaction.status != "completed":
+            raise RuntimeError(f"Gemini interaction did not complete: status={interaction.status!r}")
+        return interaction
+
+    # The call runs in its own thread so the wait can be bounded. On timeout
+    # the thread is abandoned, not killed (Python can't), and finishes in the
+    # background; shutdown(wait=False) keeps us from blocking on it.
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = pool.submit(_create)
+        try:
+            interaction = future.result(timeout=GEMINI_TIMEOUT_SECONDS)
+        except concurrent.futures.TimeoutError as e:
+            raise GeminiUnavailableError(
+                "The AI trainer is taking too long to answer. Try again in a minute."
+            ) from e
+        except Exception as e:
+            raise GeminiUnavailableError("Couldn't reach the AI trainer right now. Try again in a minute.") from e
+    finally:
+        pool.shutdown(wait=False)
 
     storage.set_last_interaction_id(user_id, interaction.id)
     return strip_dashes(interaction.output_text or "")
