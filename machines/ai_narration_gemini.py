@@ -30,6 +30,7 @@ call to Google).
 """
 
 import concurrent.futures
+import os
 
 from google import genai
 
@@ -38,8 +39,16 @@ from machines.coaching import Coaching
 from machines.explanations import ExplanationFacts
 from machines.narration_common import SYSTEM_PROMPT, setup_context_message, strip_dashes
 
-MODEL = "gemini-3-flash-preview"
-# REVISED 2026-07-09: "gemini-2.5-flash" was retired from the Interactions
+# Set GEMINI_MODEL in Render's environment to switch models without a deploy.
+#
+# REVISED 2026-09-28: was "gemini-3-flash-preview". Preview models get
+# retired with little warning, and a real user hit minutes of hangs and
+# errors on it. Google's forum reply to people whose pipelines broke on that
+# preview recommends the GA models instead (gemini-3.5-flash, or
+# gemini-3.1-flash-lite for cheaper; gemini-3.8-flash is the newest GA Flash
+# as of 2026-09). Defaulting to a GA model, not a preview.
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+# Older history, 2026-07-09: "gemini-2.5-flash" was retired from the Interactions
 # API specifically (still listed by client.models.list(), but
 # interactions.create() rejected it with "no longer available"). Verified
 # gemini-2.5-flash-lite and gemini-3-flash-preview both worked via a direct

@@ -212,3 +212,36 @@ def enforce_coaching(reply: str, coaching: Coaching) -> str:
     if len(avoid) != len(coaching.avoid):
         avoid = list(coaching.avoid)
     return f"WHY: {why}\nTIPS: {'|'.join(tips)}\nAVOID: {'|'.join(avoid)}"
+
+
+_NO_SOLUTION_VERDICTS = ("no_solution", "no_solution_by_coupling")
+
+
+def _plain_axis_name(axis_name: str) -> str:
+    """"Chest Fly arm open (degrees)" -> "chest fly arm open"."""
+    return re.sub(r"\s*\(.*?\)", "", axis_name).strip().lower()
+
+
+def fallback_narration(facts: list[ExplanationFacts], coaching: Coaching | None) -> str:
+    """A setup reply built without the LLM, for when Gemini is down: the
+    engine's pins plus the approved tips verbatim, in the same WHY/TIPS/AVOID
+    shape the chat card renders. Plainer than a narrated reply, but every
+    number in it is exact."""
+    sentences = []
+    for f in facts:
+        name = _plain_axis_name(f.axis_name)
+        if f.verdict.value in _NO_SOLUTION_VERDICTS:
+            sentences.append("This machine can't be set up safely for you right now. A coach can suggest another exercise.")
+            break
+        if f.achieved_pin is None:
+            continue  # fixed hardware: nothing to set; any advice is in TIPS/AVOID
+        sentence = f"Set the {name} to pin {f.achieved_pin}."
+        if f.verdict.value.startswith("clamped"):
+            sentence += " That's as far as this machine goes for your build."
+        sentences.append(sentence)
+        if f.user_cue:
+            sentences.append(f.user_cue)
+    why = " ".join(sentences) or "Here's your setup."
+    if coaching is None:
+        return f"WHY: {why}"
+    return f"WHY: {why}\nTIPS: {'|'.join(coaching.tips)}\nAVOID: {'|'.join(coaching.avoid)}"

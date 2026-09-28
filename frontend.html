@@ -349,6 +349,11 @@
     content: ""; width: 5px; height: 5px; border-radius: 50%; background: hsl(var(--primary));
     margin-top: 6px; flex-shrink: 0;
   }
+  /* Shown when the AI was down and the card was built without it. */
+  .setup-ai-note {
+    margin: 12px -16px -14px; padding: 10px 16px; font-size: 12px; line-height: 1.4;
+    background: hsl(38 92% 95%); color: hsl(28 80% 30%); border-top: 1px solid hsl(38 92% 85%);
+  }
 
   .chat-input-bar {
     flex-shrink: 0; background: hsl(0 0% 100% / .95); backdrop-filter: blur(12px);
@@ -702,7 +707,7 @@ function logChatMessage(userId, entry) {
 function replayChatHistory(history) {
   for (const entry of history) {
     if (entry.type === "setup") {
-      appendMachineSetupMessage(entry.machine, entry.facts, entry.text);
+      appendMachineSetupMessage(entry.machine, entry.facts, entry.text, entry.aiFallback);
     } else {
       appendMessage(entry.role, entry.text);
     }
@@ -820,7 +825,7 @@ function parseNarration(text) {
   return { why: why[1].trim(), tips: splitItems(tips), avoid: splitItems(avoid) };
 }
 
-function appendMachineSetupMessage(machine, facts, narrationText) {
+function appendMachineSetupMessage(machine, facts, narrationText, aiFallback = false) {
   const wrap = document.createElement("div");
   wrap.className = "chat-bubble-setup";
 
@@ -893,6 +898,13 @@ function appendMachineSetupMessage(machine, facts, narrationText) {
     raw.style.margin = "8px 0 0";
     raw.textContent = narrationText;
     body.appendChild(raw);
+  }
+
+  if (aiFallback) {
+    const note = document.createElement("div");
+    note.className = "setup-ai-note";
+    note.textContent = "⚠️ The AI trainer is offline right now, so this is the basic setup straight from our engine. The pins and tips are still exact.";
+    body.appendChild(note);
   }
 
   chatThread.appendChild(wrap);
@@ -1013,8 +1025,14 @@ async function sendMessage(text) {
       appendMessage("bot", body.reply);
       appendRescanButton();
     } else if (body.kind === "machine_setup") {
-      appendMachineSetupMessage(body.machine, body.facts, body.reply);
-      logChatMessage(currentUserId, { type: "setup", machine: body.machine, facts: body.facts, text: body.reply });
+      appendMachineSetupMessage(body.machine, body.facts, body.reply, body.ai_fallback);
+      logChatMessage(currentUserId, {
+        type: "setup",
+        machine: body.machine,
+        facts: body.facts,
+        text: body.reply,
+        aiFallback: body.ai_fallback,
+      });
       attachFeedbackUI(body.machine);
     } else {
       appendMessage("bot", body.reply);

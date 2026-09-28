@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 import api
 import machines.ai_narration_gemini as gemini
+from machines.coaching import COACHING
 from models import AnthropometryProfile, BilateralSegment
 
 
@@ -78,12 +79,37 @@ def test_failing_call_becomes_a_readable_error(monkeypatch, short_timeout, stub_
         gemini.chat("tester", "hi")
 
 
-@pytest.mark.parametrize("message", ["chest press", "what should I eat today?"])
 @pytest.mark.parametrize("behaviour", [_hang, _explode])
-def test_assistant_returns_json_503(monkeypatch, short_timeout, stub_storage, message, behaviour):
-    """Both paths into Gemini (a machine setup and free chat) answer with a
-    JSON `detail` the chat can show, not an unparseable plain-text 500."""
+def test_free_chat_returns_json_503(monkeypatch, short_timeout, stub_storage, behaviour):
+    """Free chat can't work without the model, so it answers with a JSON
+    `detail` the chat can show, not an unparseable plain-text 500."""
     monkeypatch.setattr(gemini, "_get_client", lambda: _Client(behaviour))
-    response = TestClient(api.app).post("/assistant/tester", json={"message": message})
+    response = TestClient(api.app).post("/assistant/tester", json={"message": "what should I eat today?"})
     assert response.status_code == 503
     assert "AI trainer" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("behaviour", [_hang, _explode])
+def test_machine_setup_still_works_without_gemini(monkeypatch, short_timeout, stub_storage, behaviour):
+    """The pins and tips don't need the model, so a setup still goes out,
+    flagged so the chat can say the AI is offline."""
+    monkeypatch.setattr(gemini, "_get_client", lambda: _Client(behaviour))
+    response = TestClient(api.app).post("/assistant/tester", json={"message": "chest press"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "machine_setup" and body["ai_fallback"] is True
+    seat = next(f for f in body["facts"] if f["axis_name"] == "Seat height")
+    assert f"WHY: Set the seat height to pin {seat['achieved_pin']}." in body["reply"]
+    assert COACHING["chest_press"].tips[0] in body["reply"]  # library text, verbatim
+
+
+def test_normal_setup_is_not_flagged(monkeypatch, short_timeout, stub_storage):
+    class _Done:
+        status = "completed"
+        id = "interaction-1"
+        output_text = "WHY: Pin 2 lines your shoulders up.\nTIPS: Tip a|Tip b\nAVOID: Avoid a|Avoid b"
+
+    monkeypatch.setattr(gemini, "_get_client", lambda: _Client(lambda: _Done()))
+    body = TestClient(api.app).post("/assistant/tester", json={"message": "chest press"}).json()
+    assert body["ai_fallback"] is False
+    assert body["reply"].startswith("WHY: Pin 2 lines your shoulders up.")
