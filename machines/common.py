@@ -16,8 +16,9 @@ second machine needed them, rather than re-derived per file.
 
 from dataclasses import dataclass
 
-from biomechanics import ground_to_nearest_hole, margin_to_reach_boundary
+from biomechanics import ground_to_nearest_hole, node_position, pin_decision_margin, pin_label
 from models import (
+    AnthropometryProfile,
     AxisPurpose,
     AxisType,
     BilateralSegment,
@@ -29,10 +30,21 @@ from models import (
     InjuryTierBands,
     MachineAxis,
     ScaleDirection,
+    ScanErrorConstants,
 )
 from safety import classify_confidence, confidence_ratio, dominant_sigma_contributor, propagate_single_segment_sigma, propagate_sigma
 
 TIER_BANDS = InjuryTierBands()
+
+
+def scan_error_for(profile: AnthropometryProfile) -> ScanErrorConstants:
+    """σ per segment for this user: the scan's own per-segment σ where the
+    scanner reported one (AnthropometryProfile.scan_sigma_mm), the
+    constants.md default otherwise."""
+    if profile.scan_sigma_mm is None:
+        return ScanErrorConstants()
+    overrides = {k: v for k, v in profile.scan_sigma_mm.model_dump().items() if v is not None}
+    return ScanErrorConstants(**overrides)
 
 
 @dataclass(frozen=True)
@@ -60,6 +72,50 @@ class AxisResolution:
     target_coordinate_mm: float | None = None
     causing_segment: str | None = None
     purpose: AxisPurpose | None = None
+    # Set when scan error could plausibly put this user on the neighbouring
+    # pin instead (LOW confidence on a congruence axis) — the product offers
+    # both, with `user_cue` saying how to tell which one fits in person.
+    alternative_pin: int | None = None
+    # One short, physical instruction the user should hear verbatim-in-spirit
+    # (e.g. how to choose between `pin` and `alternative_pin`). Unlike `note`
+    # (engineering/audit text), this is meant for the narration.
+    user_cue: str | None = None
+
+
+# A second pin is only offered on a near-tie: the target sits within this
+# fraction of a step of the midpoint between two holes (3mm on a 30mm step),
+# so both are about equally far from ideal and a quick look in person is a
+# better tie-break than the scan. With realistic scan σ nearly every
+# in-range target is technically LOW, and offering two pins that often read
+# as the product being unsure (user feedback 2026-09-28) — so LOW alone
+# isn't enough; the confidence tag itself still says LOW.
+NEAR_TIE_FRACTION_OF_STEP = 0.1
+
+
+def _alternative_pin(
+    axis: MachineAxis,
+    target_coordinate_mm: float,
+    chosen_index: int,
+    confidence: ConfidenceTag,
+    datum_label: str | None,
+) -> tuple[int | None, str | None]:
+    """(alternative pin label, cue) on a LOW-confidence near-tie with the
+    neighbouring hole, else (None, None). The cue only exists for vertical
+    seat axes, where "is the datum above or below your shoulders?" is
+    something the user can actually see."""
+    if confidence is not ConfidenceTag.LOW:
+        return None, None
+    decision = pin_decision_margin(axis, target_coordinate_mm, chosen_index)
+    if decision.neighbour_index is None:
+        return None, None
+    if decision.margin_mm > NEAR_TIE_FRACTION_OF_STEP * abs(axis.delta_mm):
+        return None, None
+    alt_pin = pin_label(axis, decision.neighbour_index)
+    if datum_label is None:
+        return alt_pin, None
+    alt_is_higher_seat = node_position(axis, decision.neighbour_index) > node_position(axis, chosen_index)
+    side = "above" if alt_is_higher_seat else "below"
+    return alt_pin, f"If the {datum_label} sit clearly {side} your shoulder line, use pin {alt_pin} instead."
 
 
 def is_tier3(injury: InjuryConstraint | None) -> bool:
@@ -88,23 +144,29 @@ def resolve_congruence_axis(
     thresholds: ConfidenceThresholds,
     dominant_segment_name: str,
     purpose: AxisPurpose | None = None,
+    datum_label: str | None = None,
 ) -> AxisResolution:
     """Generic single-segment congruence-axis resolution: nearest-node
-    grounding plus a single-segment confidence tag (σ_C = coefficient · σ).
+    grounding plus a single-segment confidence tag (σ_C = coefficient · σ),
+    measured against the boundary with the neighbouring hole (see
+    `biomechanics.pin_decision_margin`).
 
     Congruence axes are symmetric (01, Axis types) — there is no "safer"
-    hole to retreat to on LOW confidence, so the tag is surfaced but the
-    nearest-node result itself is not overridden.
+    hole to retreat to on LOW confidence, so the nearest-node result stands;
+    LOW instead surfaces the neighbouring pin as an alternative, with a
+    physical check when `datum_label` (what the seat aligns the shoulder
+    to, e.g. "handles") is given.
     """
     grounded = ground_to_nearest_hole(axis, target_coordinate_mm)
 
     sigma_c = propagate_single_segment_sigma(confidence_coefficient, confidence_sigma_mm)
-    margin = margin_to_reach_boundary(axis, target_coordinate_mm)
+    margin = pin_decision_margin(axis, target_coordinate_mm, grounded.index).margin_mm
     confidence = classify_confidence(confidence_ratio(margin, sigma_c), thresholds)
+    alternative_pin, cue = _alternative_pin(axis, target_coordinate_mm, grounded.index, confidence, datum_label)
 
     return AxisResolution(
         axis_name=axis.name,
-        pin=grounded.index,
+        pin=pin_label(axis, grounded.index),
         achieved_coordinate_mm=grounded.achieved_coordinate_mm,
         state=grounded.state,
         confidence=confidence,
@@ -113,6 +175,8 @@ def resolve_congruence_axis(
         target_coordinate_mm=target_coordinate_mm,
         causing_segment=dominant_segment_name,
         purpose=purpose,
+        alternative_pin=alternative_pin,
+        user_cue=cue,
     )
 
 
@@ -123,13 +187,16 @@ def resolve_congruence_seat(
     sitting_height_T_mm: float,
     sigma_T_mm: float,
     thresholds: ConfidenceThresholds,
+    datum_label: str | None,
     purpose: AxisPurpose = AxisPurpose.SEAT_HEIGHT_SHOULDER_ALIGNMENT,
 ) -> AxisResolution:
     """Seat = Y_machine − k_sh·T. Shared by Chest Press and Shoulder Press
-    (identical rule and sensitivity in both machine files)."""
+    (identical rule and sensitivity in both machine files). `datum_label`
+    names what sits at Y_machine, as the user sees it (e.g. "handles")."""
     target_seat_mm = y_machine_mm - k_sh * sitting_height_T_mm
     return resolve_congruence_axis(
-        axis, target_seat_mm, k_sh, sigma_T_mm, thresholds, "T (sitting height)", purpose=purpose
+        axis, target_seat_mm, k_sh, sigma_T_mm, thresholds, "T (sitting height)", purpose=purpose,
+        datum_label=datum_label,
     )
 
 
@@ -166,8 +233,9 @@ def resolve_bilateral_congruence_axis(
 
     partials = {f"{segment_label}_L": (0.5, sigma_segment_mm), f"{segment_label}_R": (0.5, sigma_segment_mm)}
     sigma_c = propagate_sigma(partials)
-    margin = margin_to_reach_boundary(axis, target_mm)
+    margin = pin_decision_margin(axis, target_mm, grounded.index).margin_mm
     confidence = classify_confidence(confidence_ratio(margin, sigma_c), thresholds)
+    alternative_pin, _ = _alternative_pin(axis, target_mm, grounded.index, confidence, datum_label=None)
 
     notes = []
     if half_offset_mm > abs(axis.delta_mm):
@@ -180,7 +248,7 @@ def resolve_bilateral_congruence_axis(
 
     return AxisResolution(
         axis_name=axis.name,
-        pin=grounded.index,
+        pin=pin_label(axis, grounded.index),
         achieved_coordinate_mm=grounded.achieved_coordinate_mm,
         state=grounded.state,
         confidence=confidence,
@@ -189,6 +257,7 @@ def resolve_bilateral_congruence_axis(
         target_coordinate_mm=target_mm,
         causing_segment=f"{segment_label} (L/R average)",
         purpose=purpose,
+        alternative_pin=alternative_pin,
     )
 
 

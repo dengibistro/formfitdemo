@@ -60,6 +60,10 @@ few replies started with "Nice work on...", pick a different pattern this \
 time.
 7. Never repeat raw field names or codes like "CLAMPED_HIGH" or \
 "causing_segment" — translate them into plain language.
+7b. If a fact block has an "alternative pin" line, say both pins and \
+include its "cue for the user" so they can check which one fits in \
+person. Any "cue for the user" line must appear in your reply (in WHY or \
+TIPS) — it's a concrete instruction from the engine, not optional flavour.
 8. The pin number alone does NOT tell you whether it's the machine's high \
 or low extreme — different axes number their holes in opposite directions. \
 Only trust the explicit "this IS the machine's MAXIMUM/MINIMUM..." line and \
@@ -121,9 +125,16 @@ def facts_to_context_block(facts: ExplanationFacts) -> str:
         lines.append(
             f"set to pin: {facts.achieved_pin} (do not infer high/low from this number alone — see the line above)"
         )
+    if facts.alternative_pin is not None:
+        lines.append(
+            f"alternative pin: {facts.alternative_pin} (the scan can't fully separate these two — "
+            "present the set pin first, the alternative second)"
+        )
     if facts.achieved_coordinate_mm is not None:
         lines.append(f"achieved coordinate: {facts.achieved_coordinate_mm:.1f}mm")
     lines.append(f"confidence: {facts.confidence.value}")
+    if facts.user_cue:
+        lines.append(f"cue for the user (must be passed on, in your own words): {facts.user_cue}")
     return "\n".join(lines)
 
 

@@ -35,7 +35,7 @@ import math
 from dataclasses import dataclass
 
 from biomechanics import ground_toward_safe_edge, margin_to_reach_boundary, node_position
-from machines.common import AxisResolution, bilateral_values, is_tier3
+from machines.common import AxisResolution, bilateral_values, is_tier3, scan_error_for
 from models import (
     AnthropometryProfile,
     AxisPurpose,
@@ -54,7 +54,6 @@ from models import (
     MachineName,
     ResistanceProfile,
     ScaleDirection,
-    ScanErrorConstants,
 )
 from safety import (
     classify_coupling_index,
@@ -71,7 +70,6 @@ from safety import (
 # ---------------------------------------------------------------------------
 
 GLOBAL = GlobalCoefficients()      # k_sh, φ_LP = 60°, β_default = 5°, κ = 0.35, ...
-SCAN_ERROR = ScanErrorConstants()  # σ_F, σ_Ti, ...
 CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
 
 CARRIAGE_D_AXIS = MachineAxis(
@@ -385,7 +383,7 @@ def resolve_leg_press(
 
     grounded = ground_toward_safe_edge(CARRIAGE_D_AXIS, geo.D_target_mm, safe_direction="higher")
 
-    sigma_D_mm, sigma_partials = _sigma_D(geo, SCAN_ERROR.sigma_F_mm, SCAN_ERROR.sigma_Ti_mm)
+    sigma_D_mm, sigma_partials = _sigma_D(geo, scan_error_for(profile).sigma_F_mm, scan_error_for(profile).sigma_Ti_mm)
     margin_mm = margin_to_reach_boundary(CARRIAGE_D_AXIS, geo.D_target_mm)
 
     d_resolution = resolve_with_confidence(

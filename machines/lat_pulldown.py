@@ -31,7 +31,7 @@ import math
 from dataclasses import dataclass
 
 from biomechanics import ground_toward_safe_edge, margin_to_reach_boundary
-from machines.common import AxisResolution, bilateral_values, is_tier3
+from machines.common import AxisResolution, bilateral_values, is_tier3, scan_error_for
 from models import (
     AnthropometryProfile,
     AxisPurpose,
@@ -44,7 +44,6 @@ from models import (
     InjuryJoint,
     MachineAxis,
     ScaleDirection,
-    ScanErrorConstants,
 )
 from safety import classify_confidence, confidence_ratio, dominant_sigma_contributor, propagate_sigma, resolve_with_confidence
 
@@ -54,7 +53,6 @@ from safety import classify_confidence, confidence_ratio, dominant_sigma_contrib
 # ---------------------------------------------------------------------------
 
 GLOBAL = GlobalCoefficients()      # k_sh = 0.63, ...
-SCAN_ERROR = ScanErrorConstants()  # σ_F, σ_Ti, σ_A, σ_T, ...
 CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
 
 BAR_HEIGHT_MM = 1940.0  # fixed overhead bar height at grip, from floor (field-measured 2026-08: floor to bar's bottom edge, was 1650)
@@ -65,7 +63,9 @@ BAR_HEIGHT_MM = 1940.0  # fixed overhead bar height at grip, from floor (field-m
 # this axis was designed against (seat_pan_height_mm doesn't move on this
 # machine and only needs measuring once) — converting the raw field numbers
 # into the "from seat" frame this axis expects needs that one extra
-# measurement, which wasn't taken yet. Confirmed clean on-site: 6 holes
+# measurement, which wasn't taken yet. Re-measured 2026-09 to the roller's
+# CENTRE (its edge is hard to find): 53/58/63/68/73/78 cm, pin 1 = lowest.
+# Bar 194 cm. Confirmed clean on-site: 6 holes
 # (not 5), 50mm step (not 35mm) — only the reference frame conversion is
 # blocking the update, not measurement quality. Left untouched rather than
 # guessing the missing seat-height offset.
@@ -165,10 +165,10 @@ def _resolve_thigh_pad(
     grounded = ground_toward_safe_edge(THIGH_PAD_AXIS, target_pad_mm, safe_direction="lower")
 
     partials = {
-        "F_L (left femur)": (coeff / 2, SCAN_ERROR.sigma_F_mm),
-        "Ti_L (left tibia)": (coeff / 2, SCAN_ERROR.sigma_Ti_mm),
-        "F_R (right femur)": (coeff / 2, SCAN_ERROR.sigma_F_mm),
-        "Ti_R (right tibia)": (coeff / 2, SCAN_ERROR.sigma_Ti_mm),
+        "F_L (left femur)": (coeff / 2, scan_error_for(profile).sigma_F_mm),
+        "Ti_L (left tibia)": (coeff / 2, scan_error_for(profile).sigma_Ti_mm),
+        "F_R (right femur)": (coeff / 2, scan_error_for(profile).sigma_F_mm),
+        "Ti_R (right tibia)": (coeff / 2, scan_error_for(profile).sigma_Ti_mm),
     }
     sigma_pad = propagate_sigma(partials)
     margin = margin_to_reach_boundary(THIGH_PAD_AXIS, target_pad_mm)
@@ -224,7 +224,7 @@ def _resolve_overhead_reach(
     seated_overhead_reach_mm = shoulder_height_seated_mm + arm_reach_mm
     margin_mm = seated_overhead_reach_mm - BAR_HEIGHT_MM
 
-    sigma_reach = math.sqrt((GLOBAL.k_sh * SCAN_ERROR.sigma_T_mm) ** 2 + SCAN_ERROR.sigma_A_mm**2)
+    sigma_reach = math.sqrt((GLOBAL.k_sh * scan_error_for(profile).sigma_T_mm) ** 2 + scan_error_for(profile).sigma_A_mm**2)
     confidence = classify_confidence(confidence_ratio(abs(margin_mm), sigma_reach), CONFIDENCE_THRESHOLDS)
 
     tolerance = frame.overhead_reach_tolerance_mm

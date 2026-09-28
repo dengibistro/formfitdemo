@@ -23,7 +23,7 @@ Run as `python3 -m machines.seated_row` from the `formfit_spec/` directory.
 
 from dataclasses import dataclass
 
-from machines.common import AxisResolution, resolve_congruence_seat
+from machines.common import AxisResolution, resolve_congruence_seat, scan_error_for
 from models import (
     AnthropometryProfile,
     AxisPurpose,
@@ -40,7 +40,6 @@ from models import (
     MachineName,
     ResistanceProfile,
     ScaleDirection,
-    ScanErrorConstants,
 )
 
 # ---------------------------------------------------------------------------
@@ -49,17 +48,18 @@ from models import (
 # ---------------------------------------------------------------------------
 
 GLOBAL = GlobalCoefficients()
-SCAN_ERROR = ScanErrorConstants()
 CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
 
+# Field-confirmed 2026-09: 41 / 44 / 47 / 50 / 53 / 56 cm from the floor,
+# numbered from the BOTTOM (1 = lowest, 6 = highest). Previously Inverted.
 SEAT_AXIS = MachineAxis(
     name="Seat height",
     axis_type=AxisType.CONGRUENCE,
-    total_holes=6,  # field-confirmed 2026-08: 6 holes, not 7
-    direction=ScaleDirection.INVERTED,  # n=1 = highest seat, n=6 = lowest
+    total_holes=6,
+    direction=ScaleDirection.DIRECT,  # n=1 = lowest seat, n=6 = highest
     alpha_deg=90,
-    p0_mm=560,
-    delta_mm=-30,  # step confirmed on-site
+    p0_mm=410,
+    delta_mm=30,
     reach_min_mm=410,
     reach_max_mm=560,
     coupling=CouplingFlag.INDEPENDENT,
@@ -81,7 +81,7 @@ SEAT_AXIS = MachineAxis(
 # real measurement — not yet wired into any resolution formula. The field
 # note only says "add as a new constant"; it doesn't define a relationship
 # to compute from it, so this is documented, not used, until one exists.
-SUPPORT_BASE_HEIGHT_MM = 800.0
+SUPPORT_BASE_HEIGHT_MM = 800.0  # floor to the bottom of the chest pad's support (re-confirmed 2026-09)
 
 SEATED_ROW_MACHINE = Machine(
     name=MachineName.SEATED_ROW,
@@ -154,8 +154,16 @@ def resolve_seated_row(
     targeted the chest-pad capping axis, which no longer exists now that
     the pad is confirmed fixed hardware.
     """
+    # datum_label=None: what y_target_mm physically aligns the shoulder to isn't
+    # established yet, so no "above/below your shoulders" cue is offered.
     seat = resolve_congruence_seat(
-        SEAT_AXIS, frame.y_target_mm, GLOBAL.k_sh, profile.sitting_height_T_mm, SCAN_ERROR.sigma_T_mm, CONFIDENCE_THRESHOLDS
+        SEAT_AXIS,
+        frame.y_target_mm,
+        GLOBAL.k_sh,
+        profile.sitting_height_T_mm,
+        scan_error_for(profile).sigma_T_mm,
+        CONFIDENCE_THRESHOLDS,
+        datum_label=None,
     )
     chest_pad = _resolve_chest_pad()
     return SeatedRowResolution(seat=seat, chest_pad=chest_pad)
@@ -204,7 +212,7 @@ if __name__ == "__main__":
     _show("Basketball player", result_1)
 
     assert result_1.seat.state is FeasibilityState.CLAMPED_LOW
-    assert result_1.seat.pin == 6  # Inverted axis: n=6 is the LOWEST physical seat coordinate (6 holes now)
+    assert result_1.seat.pin == 1  # pin 1 = lowest seat
     assert result_1.chest_pad.pin is None
     assert result_1.chest_pad.achieved_coordinate_mm is None
     assert result_1.chest_pad.confidence is ConfidenceTag.LOW
@@ -225,7 +233,7 @@ if __name__ == "__main__":
     _show("Petite user", result_2)
 
     assert result_2.seat.state is FeasibilityState.CLAMPED_HIGH
-    assert result_2.seat.pin == 1  # Inverted axis: n=1 is the HIGHEST physical seat coordinate
+    assert result_2.seat.pin == 6  # pin 6 = highest seat
     assert result_2.chest_pad.note is not None and "not yet measured" in result_2.chest_pad.note
 
     # --- Edge case 3: mid-range profile -> seat should land IN_RANGE ---

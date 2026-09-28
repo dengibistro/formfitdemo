@@ -66,6 +66,8 @@ class ExplanationFacts:
     confidence: ConfidenceTag
     dominant_segment: str | None
     engineering_note: str | None  # the existing free-text note — kept for debugging/audit, not for narration
+    alternative_pin: int | None = None  # neighbouring pin the scan can't rule out (LOW confidence)
+    user_cue: str | None = None  # physical instruction for the user, e.g. how to pick between pin and alternative_pin
 
 
 def build_explanation_facts(resolution: AxisResolution, machine_name: str | None = None) -> ExplanationFacts:
@@ -88,6 +90,8 @@ def build_explanation_facts(resolution: AxisResolution, machine_name: str | None
         confidence=resolution.confidence,
         dominant_segment=resolution.dominant_segment,
         engineering_note=resolution.note,
+        alternative_pin=resolution.alternative_pin,
+        user_cue=resolution.user_cue,
     )
 
 

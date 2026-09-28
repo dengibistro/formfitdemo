@@ -14,12 +14,14 @@ Aligns GH joint to the handle force line.
 |---|---|
 | total_holes | 6 |
 | step_mm | 30 |
-| direction | Inverted (1 = highest seat, 6 = lowest) |
+| direction | Direct (lowest seat marked **0**, then 1–5 up to the highest) |
 | α | 90° |
-| P₀ (n=1) | 510 |
-| Δ | −30 |
+| P₀ (n=1, marked 0) | 360 |
+| Δ | +30 |
 | reach_mm | [360, 510] |
 | coupling | Independent |
+
+**Field visit 2026-09:** numbering confirmed on the machine itself — the lowest seat is marked 0 and 1–5 run upward (36/39/42/45/48/51 cm). This axis was previously documented (and coded) as Inverted, which mirrored every pin the assistant gave.
 
 **Rule:** `Seat = Y_machine − k_sh·T` (k_sh = 0.63, `constants.md`). Longer torso → seat drops. Sensitivity dSeat/dT ≈ −0.63.
 

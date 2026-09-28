@@ -27,6 +27,7 @@ Run as `python3 -m machines.leg_extension` from the `formfit_spec/` directory.
 from dataclasses import dataclass, replace
 
 from machines.common import (
+    scan_error_for,
     LEG_MACHINE_SEAT_DEPTH_AXIS,
     AxisResolution,
     bilateral_values,
@@ -51,7 +52,6 @@ from models import (
     MachineName,
     ResistanceProfile,
     ScaleDirection,
-    ScanErrorConstants,
 )
 from safety import resolve_with_confidence
 
@@ -60,7 +60,6 @@ from safety import resolve_with_confidence
 # own fixed-frame numbers (canonical only in machines/leg_extension.md)
 # ---------------------------------------------------------------------------
 
-SCAN_ERROR = ScanErrorConstants()
 CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
 
 CAM_PIVOT_HEIGHT_MM = 430.0  # fixed, from floor
@@ -131,7 +130,7 @@ def _resolve_shin_pad(profile: AnthropometryProfile) -> AxisResolution:
         tibia_left,
         tibia_right,
         TIBIA_SHIN_PAD_OFFSET_MM,
-        SCAN_ERROR.sigma_Ti_mm,
+        scan_error_for(profile).sigma_Ti_mm,
         CONFIDENCE_THRESHOLDS,
         "Ti (tibia)",
         extra_note=extra_note,
@@ -201,7 +200,7 @@ def resolve_leg_extension(
 ) -> LegExtensionResolution:
     """Resolve Leg Extension seat depth + shin pad + terminal ROM stop for one user."""
     injuries = injuries or {}
-    seat_depth = resolve_seat_depth_from_femur(profile.femur, SCAN_ERROR.sigma_F_mm, CONFIDENCE_THRESHOLDS)
+    seat_depth = resolve_seat_depth_from_femur(profile.femur, scan_error_for(profile).sigma_F_mm, CONFIDENCE_THRESHOLDS)
     shin_pad = _resolve_shin_pad(profile)
     terminal_rom_stop = _resolve_terminal_rom_stop(
         knee_left=injuries.get(InjuryJoint.KNEE_L),
@@ -250,11 +249,14 @@ if __name__ == "__main__":
 
     # avg F=559 -> 529mm target; deepest hole (n=7) sits at 520mm, which is
     # still the nearest *real* hole (n=7 <= total_holes=7, so this isn't a
-    # boundary clamp) — but only 9mm from reach_max, hence LOW confidence.
+    # boundary clamp). The pin choice itself is unambiguous — the boundary
+    # with n=6 (490mm) is at 505mm, 24mm away — so MEDIUM, not LOW (the
+    # confidence margin is to the neighbouring pin now, not to reach_max).
     assert result_1.seat_depth.state is FeasibilityState.IN_RANGE
     assert result_1.seat_depth.pin == 7
     assert math.isclose(result_1.seat_depth.achieved_coordinate_mm, 520.0)
-    assert result_1.seat_depth.confidence is ConfidenceTag.LOW
+    assert result_1.seat_depth.confidence is ConfidenceTag.MEDIUM
+    assert result_1.seat_depth.alternative_pin is None
     # avg Ti=521 -> 521-20=501mm, past reach_max(450) -> clamps deepest hole
     assert result_1.shin_pad.state is FeasibilityState.CLAMPED_HIGH
     assert result_1.shin_pad.pin == 5

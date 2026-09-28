@@ -309,6 +309,12 @@ class MachineAxis(FormFitConstant):
         None, description="σ — the safe rounding direction; required on capping axes only"
     )
     beta_deg: float | None = Field(None, description="angular budget β for this axis; capping axes only")
+    first_pin_label: int = Field(
+        1,
+        description="number printed on the machine at hole n=1 — e.g. 0 on Chest Press, whose lowest "
+        "seat position is marked 0 (field-confirmed 2026-09). Every pin shown to a user goes "
+        "through `biomechanics.pin_label`, never the raw hole index.",
+    )
 
     @model_validator(mode="after")
     def _reach_is_ordered(self) -> "MachineAxis":
@@ -380,12 +386,29 @@ class BilateralSegment(FormFitRecord):
         return self
 
 
+class ScanSigmaOverrides(FormFitRecord):
+    """Per-scan σ (mm), computed by the scanner from how well it actually saw
+    the landmarks behind each segment (scan/measurements.mjs's
+    segmentConfidenceSigmaMm). Field names match ScanErrorConstants; any
+    field left None falls back to that constant."""
+
+    sigma_T_mm: float | None = Field(None, gt=0)
+    sigma_F_mm: float | None = Field(None, gt=0)
+    sigma_Ti_mm: float | None = Field(None, gt=0)
+    sigma_A_mm: float | None = Field(None, gt=0)
+    sigma_BAW_mm: float | None = Field(None, gt=0)
+    sigma_Cd_mm: float | None = Field(None, gt=0)
+
+
 class AnthropometryProfile(FormFitRecord):
     """The seven inputs (Section 02) plus scan provenance for one user."""
 
     user_id: str
     provenance: ScanProvenance = ScanProvenance.SCANNED
     captured_at: date
+    scan_sigma_mm: ScanSigmaOverrides | None = Field(
+        None, description="this scan's own σ per segment; None -> constants.md defaults"
+    )
 
     height_H_mm: float = Field(
         ..., gt=0, description="Total height — calibration/sanity bound only, never a direct machine input"

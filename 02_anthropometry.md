@@ -53,6 +53,9 @@ Two worked forms used repeatedly across machine files:
 
 ```
 Margin M = distance from resolved coordinate to nearest decision boundary
+           (congruence axes: the midpoint with the neighbouring hole — the
+            decision scan error can flip is WHICH pin; revised 2026-09-28,
+            previously the edge of the axis's reach)
 r = M / σ_C
 ```
 
@@ -60,7 +63,7 @@ r = M / σ_C
 |---|---|---|
 | ≥ 3 | HIGH | State the verdict plainly |
 | 1 – 3 | MEDIUM | State it, mark provisional |
-| < 1 | LOW | Do not state a confident IN_RANGE/CLAMPED; resolve to the safe edge σ and surface LOW confidence with the dominant contributing segment named |
+| < 1 | LOW | Capping axes: do not state a confident IN_RANGE/CLAMPED; resolve to the safe edge σ. Congruence axes (no safe edge): keep the nearest pin; offer the neighbouring pin as an alternative, with a physical check, only on a near-tie (target within 10% of a step of the midpoint) — offering two pins every time LOW fires reads as the product being unsure. Both: surface LOW with the dominant contributing segment named |
 
 **Two hard rules:**
 1. Uncertainty always resolves toward the safe side, never toward more range.

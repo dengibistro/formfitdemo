@@ -30,6 +30,7 @@ from dataclasses import dataclass, replace
 
 from biomechanics import ground_toward_safe_edge
 from machines.common import (
+    scan_error_for,
     LEG_MACHINE_SEAT_DEPTH_AXIS,
     AxisResolution,
     bilateral_values,
@@ -54,7 +55,6 @@ from models import (
     MachineName,
     ResistanceProfile,
     ScaleDirection,
-    ScanErrorConstants,
 )
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,6 @@ from models import (
 # fixed-frame numbers (canonical only in machines/leg_curl.md)
 # ---------------------------------------------------------------------------
 
-SCAN_ERROR = ScanErrorConstants()
 CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
 
 CAM_PIVOT_HEIGHT_MM = 430.0  # fixed, from floor — same congruence alignment target as Leg Extension
@@ -178,7 +177,7 @@ def _resolve_ankle_pad(
         tibia_left,
         tibia_right,
         frame.ankle_pad_offset_mm,
-        SCAN_ERROR.sigma_Ti_mm,
+        scan_error_for(profile).sigma_Ti_mm,
         CONFIDENCE_THRESHOLDS,
         "Ti (tibia)",
         extra_note=extra_note,
@@ -206,7 +205,7 @@ def resolve_leg_curl(
 ) -> LegCurlResolution:
     """Resolve Seated Leg Curl seat depth + thigh fixator + ankle pad for one user."""
     injuries = injuries or {}
-    seat_depth = resolve_seat_depth_from_femur(profile.femur, SCAN_ERROR.sigma_F_mm, CONFIDENCE_THRESHOLDS)
+    seat_depth = resolve_seat_depth_from_femur(profile.femur, scan_error_for(profile).sigma_F_mm, CONFIDENCE_THRESHOLDS)
     thigh_fixator = _resolve_thigh_fixator()
     ankle_pad = _resolve_ankle_pad(
         profile,

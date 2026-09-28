@@ -47,6 +47,7 @@ from machines.seated_row import SeatedRowFrameConstants, resolve_seated_row
 from machines.shoulder_press import resolve_shoulder_press
 from models import (
     AnthropometryProfile,
+    FeasibilityState,
     InjuryConstraint,
     InjuryJoint,
     InjuryProvenance,
@@ -74,6 +75,15 @@ class _BilateralSegmentIn(BaseModel):
     single_sided: bool = False
 
 
+class _ScanSigmaIn(BaseModel):
+    sigma_T_mm: float | None = None
+    sigma_F_mm: float | None = None
+    sigma_Ti_mm: float | None = None
+    sigma_A_mm: float | None = None
+    sigma_BAW_mm: float | None = None
+    sigma_Cd_mm: float | None = None
+
+
 class ProfileIn(BaseModel):
     user_id: str
     captured_at: date
@@ -84,6 +94,7 @@ class ProfileIn(BaseModel):
     arm: _BilateralSegmentIn
     biacromial_width_BAW_mm: float
     chest_depth_Cd_mm: float
+    scan_sigma_mm: _ScanSigmaIn | None = None  # absent from older scanner builds -> engine defaults
 
 
 class InjuryIn(BaseModel):
@@ -190,24 +201,61 @@ def _require_profile(user_id: str) -> AnthropometryProfile:
     return profile
 
 
+# Scans captured before this date used the old scan/measurements.mjs formulas
+# (T measured ear-to-hip, and a calibration that inflated every segment by
+# ~12%) — their numbers put nearly everyone on the top seat hole. They can't
+# be converted after the fact (the raw landmarks aren't stored), so those
+# users are asked to scan again instead of being served wrong setups.
+SCAN_FORMULA_FIXED_ON = date(2026, 9, 28)
+
+
+def _needs_rescan(profile: AnthropometryProfile) -> bool:
+    return profile.captured_at < SCAN_FORMULA_FIXED_ON
+
+
+_RESCAN_REPLY = (
+    "We've improved how the scan measures you, so your old measurements would give "
+    "the wrong seat settings. Please redo your scan (about a minute) and I'll set you up properly."
+)
+
+
 @app.get("/profiles/{user_id}/exists")
 def profile_exists(user_id: str) -> dict:
     """Cheap existence check for the frontend's "we found a profile named X
     — is this you?" step (Phase 2 chat product plan) — avoids needing to
     catch/parse a 404 from GET /profiles/{user_id} just to answer a yes/no
     question, and never leaks the profile's actual data in the process."""
-    return {"exists": storage.get_profile(_normalize_user_id(user_id)) is not None}
+    profile = storage.get_profile(_normalize_user_id(user_id))
+    return {
+        "exists": profile is not None,
+        "needs_rescan": profile is not None and _needs_rescan(profile),
+    }
+
+
+def _is_informative(facts: ExplanationFacts) -> bool:
+    """False for fixed hardware the engine has no data on yet (no pin, no
+    coordinate, nothing flagged) — e.g. Chest Press's handle depth. Showing
+    those as a "—" row or narrating them as "in range, low confidence" was
+    pure noise."""
+    return not (
+        facts.achieved_pin is None
+        and facts.achieved_coordinate_mm is None
+        and facts.verdict is FeasibilityState.IN_RANGE
+    )
 
 
 def _extract_facts(resolution: object, machine_label: str) -> list[ExplanationFacts]:
     """Pull every AxisResolution field off a machine's result dataclass and
     turn each into ExplanationFacts — generic over all 8 machines instead of
-    hardcoding each one's field names."""
+    hardcoding each one's field names. Uninformative fixed-hardware axes are
+    dropped (see `_is_informative`)."""
     facts = []
     for field in dataclasses.fields(resolution):
         value = getattr(resolution, field.name)
         if isinstance(value, AxisResolution):
-            facts.append(build_explanation_facts(value, machine_name=machine_label))
+            axis_facts = build_explanation_facts(value, machine_name=machine_label)
+            if _is_informative(axis_facts):
+                facts.append(axis_facts)
     return facts
 
 
@@ -354,7 +402,7 @@ class AssistantMessage(BaseModel):
 
 
 class AssistantReply(BaseModel):
-    kind: str  # "machine_setup" | "clarify" | "unsupported_machine" | "chat"
+    kind: str  # "machine_setup" | "clarify" | "unsupported_machine" | "chat" | "rescan"
     reply: str
     machine: str | None = None
     facts: list[ExplanationFacts] | None = None
@@ -384,6 +432,22 @@ _UNSUPPORTED_MACHINES: dict[str, str] = {
         "Leg extension isn't available in this test version yet — ask me about "
         "any other machine!"
     ),
+    # 2026-09-28 population sweep: the fixed-bar reach check told nearly
+    # everyone under ~190cm the machine doesn't fit them (the bar is meant to
+    # be reached up to / half-standing, not at seated arm's length), and the
+    # thigh-pad axis is still in the pre-audit reference frame (see
+    # lat_pulldown.py). Gated until both are re-modeled.
+    "lat_pulldown": (
+        "Lat pulldown is being re-measured — not available in this test version yet. "
+        "Ask me about any other machine!"
+    ),
+    # 2026-09-28 population sweep: y_target_mm (api.py's _SEATED_ROW_FRAME) was
+    # never measured on-site, and the illustrative 1180mm put everyone under
+    # ~190cm on the top seat hole. Gated until it's measured.
+    "seated_row": (
+        "Seated row is being re-measured — not available in this test version yet. "
+        "Ask me about any other machine!"
+    ),
 }
 
 
@@ -396,6 +460,9 @@ def assistant_message(user_id: str, body: AssistantMessage) -> AssistantReply:
     user_id = _normalize_user_id(user_id)
     profile = _require_profile(user_id)
     storage.log_message(user_id, "user")
+    if _needs_rescan(profile):
+        storage.log_message(user_id, "bot", kind="rescan")
+        return AssistantReply(kind="rescan", reply=_RESCAN_REPLY)
     matches = detect_machine_intent(body.message)
 
     if len(matches) == 1:

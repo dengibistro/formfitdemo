@@ -20,12 +20,14 @@ Places handle bottom at shoulder level.
 |---|---|
 | total_holes | 5 |
 | step_mm | 30 |
-| direction | Inverted (1 = highest, 5 = lowest) |
+| direction | Direct (1 = lowest, 5 = highest) |
 | α | 90° |
-| P₀ (n=1) | 470 |
-| Δ | −30 |
+| P₀ (n=1) | 350 |
+| Δ | +30 |
 | reach_mm | [350, 470] |
 | coupling | Independent |
+
+**Field visit 2026-09:** 35/38/41/44/47 cm, pin 1 = lowest — previously coded Inverted, mirroring every pin.
 
 **Field audit 2026-08:** confirmed 5 holes (not 7), reach [350, 470]mm (not [400, 580]mm), step 30mm unchanged.
 
@@ -43,7 +45,7 @@ the full derivation and the estimate's provenance/caveat.
 
 Moulded dual handle, effective span ≈ 520 mm. **Not adjustable — no discrete axis.** Not independently re-verified in the 2026-08 field audit — no known discrepancy, but not re-measured either.
 
-**Engine action:** raise a NO_SOLUTION-grip flag when required grip (g_grip·BAW, g_grip ∈ [1.0, 1.5], `constants.md`) falls outside [BAW, 1.5·BAW] against 520 mm. Narrow BAW → over-abduction risk; wide BAW → cramped.
+**Engine action (revised 2026-09-28):** when 520 mm falls outside [BAW, 1.5·BAW] (g_grip, `constants.md`), report CLAMPED (the frame's limit for this body) with a technique cue — narrow BAW → handles wide for them, keep elbows forward; wide BAW → handles narrow, stop short if the shoulders pinch. Previously NO_SOLUTION, which is far too strong for a fixed grip; also the scanner's BAW (shoulder landmarks ≈ joint centres) reads narrower than true acromion-to-acromion breadth, so the upper bound fires early.
 
 ## Injury modifiers (from `../constants.md`)
 

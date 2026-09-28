@@ -13,7 +13,7 @@ Run as `python3 -m machines.chest_press` from the `formfit_spec/` directory.
 import math
 from dataclasses import dataclass
 
-from machines.common import AxisResolution, resolve_congruence_seat
+from machines.common import AxisResolution, resolve_congruence_seat, scan_error_for
 from models import (
     AnthropometryProfile,
     AxisPurpose,
@@ -28,7 +28,6 @@ from models import (
     InjuryJoint,
     MachineAxis,
     ScaleDirection,
-    ScanErrorConstants,
 )
 
 # ---------------------------------------------------------------------------
@@ -38,23 +37,32 @@ from models import (
 # ---------------------------------------------------------------------------
 
 GLOBAL = GlobalCoefficients()      # k_sh = 0.63, β_default = 5°, ...
-SCAN_ERROR = ScanErrorConstants()  # σ_T, σ_A, σ_Cd, ...
 CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
 
-Y_MACHINE_MM = 1020.0          # fixed handle-line datum, from floor (field-measured 2026-08, was 1200)
+# Floor to the handle's BOTTOM EDGE in the start position (field-measured
+# 2026-08, confirmed 2026-09 that it's the bottom edge). The grip's own
+# centre line sits ~1.5cm higher; not added, since whether the seat should
+# put the shoulder on the handle line at all (vs. mid-chest, the common
+# coaching cue) is still open — see PRODUCT_ROADMAP_NOTES.md.
+Y_MACHINE_MM = 1020.0
 THETA_CAP_HEALTHY_DEG = 25.0   # healthy-baseline shoulder horizontal extension cap
 
+# Field-confirmed 2026-09 (floor to the front of the seat): 36 / 39 / 42 /
+# 45 / 48 / 51 cm, numbered from the BOTTOM — the lowest position is marked
+# 0, then 1-5 up to the highest. This axis used to be Inverted (n=1 =
+# highest), i.e. every pin the assistant gave was mirrored.
 SEAT_AXIS = MachineAxis(
     name="Seat height",
     axis_type=AxisType.CONGRUENCE,
-    total_holes=6,  # field-confirmed 2026-08: 6 holes, not 7
-    direction=ScaleDirection.INVERTED,  # n=1 = highest seat / most restricted reach, n=6 = lowest
+    total_holes=6,
+    direction=ScaleDirection.DIRECT,  # n=1 = lowest seat (marked "0"), n=6 = highest (marked "5")
     alpha_deg=90,
-    p0_mm=510,
-    delta_mm=-30,  # step confirmed on-site
+    p0_mm=360,
+    delta_mm=30,
     reach_min_mm=360,
     reach_max_mm=510,
     coupling=CouplingFlag.INDEPENDENT,
+    first_pin_label=0,
 )
 
 # Handle start depth: field audit (2026-08) found the handles don't move at
@@ -131,7 +139,13 @@ def resolve_chest_press(
     and the seat axis never had an injury modifier of its own.
     """
     seat = resolve_congruence_seat(
-        SEAT_AXIS, Y_MACHINE_MM, GLOBAL.k_sh, profile.sitting_height_T_mm, SCAN_ERROR.sigma_T_mm, CONFIDENCE_THRESHOLDS
+        SEAT_AXIS,
+        Y_MACHINE_MM,
+        GLOBAL.k_sh,
+        profile.sitting_height_T_mm,
+        scan_error_for(profile).sigma_T_mm,
+        CONFIDENCE_THRESHOLDS,
+        datum_label="handles",
     )
     handle_depth = _resolve_handle_depth()
     return ChestPressResolution(seat=seat, handle_depth=handle_depth)
@@ -176,7 +190,7 @@ if __name__ == "__main__":
     _show("Basketball player", result_1)
 
     assert result_1.seat.state is FeasibilityState.CLAMPED_LOW
-    assert result_1.seat.pin == 6  # Inverted axis: n=6 is the LOWEST physical seat coordinate (6 holes now)
+    assert result_1.seat.pin == 0  # lowest seat, marked "0" on the machine
     assert math.isclose(result_1.seat.achieved_coordinate_mm, SEAT_AXIS.reach_min_mm)
     assert result_1.handle_depth.pin is None
     assert result_1.handle_depth.achieved_coordinate_mm is None
@@ -198,7 +212,7 @@ if __name__ == "__main__":
     _show("Petite user", result_2)
 
     assert result_2.seat.state is FeasibilityState.CLAMPED_HIGH
-    assert result_2.seat.pin == 1  # Inverted axis: n=1 is the HIGHEST physical seat coordinate
+    assert result_2.seat.pin == 5  # highest seat, marked "5" on the machine
     assert math.isclose(result_2.seat.achieved_coordinate_mm, SEAT_AXIS.reach_max_mm)
     # Frame simply can't go high enough for such a short torso -> safe, valid CLAMPED_HIGH, not a crash.
     assert result_2.handle_depth.pin is None
@@ -218,8 +232,18 @@ if __name__ == "__main__":
     result_3 = resolve_chest_press(mid_user)
     _show("Mid-range user", result_3)
 
-    # target = 1020 - 0.63*900 = 453mm, comfortably inside [360, 510]
+    # target = 1020 - 0.63*900 = 453mm, inside [360, 510] -> nearest hole 450mm, marked "3";
+    # 453 sits 12mm from the 465mm boundary with "4" — about 1.3σ, so not LOW, no alternative offered.
     assert result_3.seat.state is FeasibilityState.IN_RANGE
+    assert result_3.seat.pin == 3
+    assert result_3.seat.alternative_pin is None
+
+    # T=925 -> target 437mm: 2mm from the 435mm boundary between "2" (420) and "3" (450) -> LOW, both offered.
+    borderline = resolve_chest_press(mid_user.model_copy(update={"sitting_height_T_mm": 925.0}))
+    _show("Borderline user", borderline)
+    assert borderline.seat.pin == 3 and borderline.seat.alternative_pin == 2
+    assert borderline.seat.confidence is ConfidenceTag.LOW
+    assert borderline.seat.user_cue is not None and "below your shoulder line" in borderline.seat.user_cue
     assert result_3.handle_depth.state is FeasibilityState.IN_RANGE  # fixed hardware always reports IN_RANGE for now
     assert result_3.handle_depth.note is not None and "not yet measured" in result_3.handle_depth.note
 

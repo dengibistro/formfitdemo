@@ -372,6 +372,7 @@
   .setup-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: hsl(var(--muted-foreground)); margin-bottom: 6px; }
   .setup-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; font-size: 13px; }
   .setup-label { color: hsl(var(--muted-foreground)); }
+  .setup-row-note { font-size: 12px; line-height: 1.4; color: hsl(var(--foreground) / .75); margin: 0 0 6px; }
   .setup-value { font-family: "Barlow Condensed", Inter, sans-serif; font-weight: 700; font-size: 15px; }
   .setup-section-header {
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
@@ -529,7 +530,7 @@
             <line x1="4" y1="17" x2="20" y2="17" />
           </svg>
         </button>
-        <input id="chatInput" type="text" placeholder="e.g. I'm at the lat pulldown" />
+        <input id="chatInput" type="text" placeholder="e.g. I'm at the chest press" />
         <button id="chatSendBtn" type="button" aria-label="Send">➤</button>
       </div>
     </div>
@@ -625,6 +626,10 @@ document.getElementById("formfitTile").addEventListener("click", enterFormFit);
 document.getElementById("formfitTabItem").addEventListener("click", enterFormFit);
 
 let pendingName = null;
+// Set by the /exists check: this returning user's saved scan predates the
+// measurement fix (api.py's SCAN_FORMULA_FIXED_ON), so "yes, that's me"
+// sends them back through the scan instead of into chat.
+let pendingNeedsRescan = false;
 
 function goToSplash(name, returning) {
   pendingName = name;
@@ -681,7 +686,10 @@ nameContinueBtn.addEventListener("click", async () => {
     const res = await fetch(`${API_BASE}/profiles/${encodeURIComponent(name)}/exists`);
     const body = await res.json();
     if (body.exists) {
-      isThisYouText.textContent = `We found a profile named "${name}" — is this you?`;
+      pendingNeedsRescan = Boolean(body.needs_rescan);
+      isThisYouText.textContent = pendingNeedsRescan
+        ? `We found a profile named "${name}" — is this you? We've improved the scan since then, so we'll ask you to redo it (about a minute).`
+        : `We found a profile named "${name}" — is this you?`;
       showScreen(screenIsThisYou);
     } else {
       goToSplash(name, false);
@@ -695,7 +703,7 @@ nameContinueBtn.addEventListener("click", async () => {
   }
 });
 
-isThisYouYesBtn.addEventListener("click", () => goToSplash(nameInput.value.trim(), true));
+isThisYouYesBtn.addEventListener("click", () => goToSplash(nameInput.value.trim(), !pendingNeedsRescan));
 
 isThisYouNoBtn.addEventListener("click", () => {
   nameInput.value = "";
@@ -712,7 +720,8 @@ const MACHINE_INFO = {
   chest_press: { label: "Chest Press" },
   shoulder_press: { label: "Shoulder Press" },
   lat_pulldown: { label: "Lat Pulldown" },
-  pec_deck: { label: "Pec Deck (Chest Fly)" },
+  // pinHint: how the chosen number reads on the machine itself (field note 2026-09) — shown under the seat row.
+  pec_deck: { label: "Pec Deck (Chest Fly)", pinHint: (pin) => `With the pin in, the number showing on the seat post should be ${pin}.` },
   seated_row: { label: "Seated Row" },
   leg_extension: { label: "Leg Extension" },
   leg_curl: { label: "Leg Curl" },
@@ -739,7 +748,7 @@ const MACHINE_PHOTOS = {
 // Matches api.py's _UNSUPPORTED_MACHINES — these chips/tiles still tap
 // through to a real (friendly "not available yet") bot reply, just
 // visually flagged up front so tapping one isn't a surprise dead-end.
-const UNSUPPORTED_SLUGS = new Set(["leg_press", "leg_curl", "leg_extension"]);
+const UNSUPPORTED_SLUGS = new Set(["leg_press", "leg_curl", "leg_extension", "lat_pulldown", "seated_row"]);
 
 let currentUserId = null;
 
@@ -823,7 +832,8 @@ function renderPickerGrid(slugs) {
 async function loadEquipmentStrip() {
   try {
     const res = await fetch(`${API_BASE}/machines`);
-    const slugs = await res.json();
+    // Working machines first, "Soon" ones after — stable sort keeps API order within each group.
+    const slugs = (await res.json()).sort((a, b) => UNSUPPORTED_SLUGS.has(a) - UNSUPPORTED_SLUGS.has(b));
     renderEquipmentStrip(slugs);
     renderPickerGrid(slugs);
   } catch (err) {
@@ -857,18 +867,35 @@ function humanizeAxisName(axisName) {
   return axisName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function factsToSetupRows(facts) {
-  return (facts || []).map((f) => {
-    let value;
-    if (f.achieved_pin !== null && f.achieved_pin !== undefined) {
-      value = `Pin ${f.achieved_pin}`;
-    } else if (f.achieved_coordinate_mm !== null && f.achieved_coordinate_mm !== undefined) {
-      value = `${(f.achieved_coordinate_mm / 10).toFixed(1)} cm`;
-    } else {
-      value = "—"; // em dash — no continuous target for this axis
+// Only things the user can actually set (a pin) get a row, plus fixed
+// hardware that doesn't fit them at all — a fixed part that fits needs no
+// action, so it's left to the narration rather than shown as a bare number.
+// `notes` under a row: the neighbouring pin the scan can't rule out plus the
+// engine's physical check for choosing between them, and any machine-specific
+// hint for reading the number. A fixed part with a cue gets a note-only row.
+function factsToSetupRows(facts, machine) {
+  const pinHint = (MACHINE_INFO[machine] || {}).pinHint;
+  const rows = [];
+  for (const f of facts || []) {
+    const label = humanizeAxisName(f.axis_name);
+    const hasPin = f.achieved_pin !== null && f.achieved_pin !== undefined;
+    const notes = [];
+    if (hasPin && f.alternative_pin !== null && f.alternative_pin !== undefined) {
+      notes.push(f.user_cue || `Or pin ${f.alternative_pin} — try both and keep the one that feels aligned.`);
+    } else if (f.user_cue) {
+      notes.push(f.user_cue);
     }
-    return { label: humanizeAxisName(f.axis_name), value };
-  });
+    if (hasPin && pinHint && f.axis_name === "Seat height") notes.push(pinHint(f.achieved_pin));
+
+    if (f.verdict.startsWith("no_solution")) {
+      rows.push({ label, value: "Not suitable", notes });
+    } else if (hasPin) {
+      rows.push({ label, value: f.achieved_pin === 0 ? "Pin 0 (lowest)" : `Pin ${f.achieved_pin}`, notes });
+    } else if (notes.length) {
+      rows.push({ label, value: "", notes });
+    }
+  }
+  return rows;
 }
 
 // Parses the narration's mandated WHY:/TIPS:/AVOID: three-line format (see
@@ -906,7 +933,7 @@ function appendMachineSetupMessage(machine, facts, narrationText) {
   title.textContent = "Your Setup";
   body.appendChild(title);
 
-  for (const row of factsToSetupRows(facts)) {
+  for (const row of factsToSetupRows(facts, machine)) {
     const rowEl = document.createElement("div");
     rowEl.className = "setup-row";
     const labelEl = document.createElement("span");
@@ -918,6 +945,12 @@ function appendMachineSetupMessage(machine, facts, narrationText) {
     rowEl.appendChild(labelEl);
     rowEl.appendChild(valueEl);
     body.appendChild(rowEl);
+    for (const note of row.notes) {
+      const noteEl = document.createElement("p");
+      noteEl.className = "setup-row-note";
+      noteEl.textContent = note;
+      body.appendChild(noteEl);
+    }
   }
 
   const parsed = parseNarration(narrationText);
@@ -1034,6 +1067,23 @@ function attachFeedbackUI(machine) {
   });
 }
 
+function rescanUrl(userId) {
+  return `${API_BASE}/scan/scan.html?user_id=${encodeURIComponent(userId)}`;
+}
+
+function appendRescanButton() {
+  const row = document.createElement("div");
+  row.className = "feedback-comment-row";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.style.padding = "10px 14px";
+  btn.textContent = "Redo my scan";
+  btn.addEventListener("click", () => { window.location.href = rescanUrl(currentUserId); });
+  row.appendChild(btn);
+  chatThread.appendChild(row);
+  chatThread.scrollTop = chatThread.scrollHeight;
+}
+
 async function sendMessage(text) {
   const trimmed = text.trim();
   if (!trimmed || !currentUserId) return;
@@ -1058,6 +1108,10 @@ async function sendMessage(text) {
       // confusing than useful, and the point of leaving these loud (per
       // project decision) is so the friend reports it live, not later.
       appendMessage("bot", `Something went wrong: ${body.detail || res.statusText}`);
+    } else if (body.kind === "rescan") {
+      // Not logged/feedback-able — it's a routing prompt, not an answer.
+      appendMessage("bot", body.reply);
+      appendRescanButton();
     } else if (body.kind === "machine_setup") {
       appendMachineSetupMessage(body.machine, body.facts, body.reply);
       logChatMessage(currentUserId, { type: "setup", machine: body.machine, facts: body.facts, text: body.reply });

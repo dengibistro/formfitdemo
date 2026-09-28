@@ -19,7 +19,7 @@ Run as `python3 -m machines.shoulder_press` from the `formfit_spec/` directory.
 import math
 from dataclasses import dataclass
 
-from machines.common import AxisResolution, is_tier3, resolve_congruence_seat
+from machines.common import AxisResolution, is_tier3, resolve_congruence_seat, scan_error_for
 from models import (
     AnthropometryProfile,
     AxisPurpose,
@@ -33,7 +33,6 @@ from models import (
     InjuryJoint,
     MachineAxis,
     ScaleDirection,
-    ScanErrorConstants,
 )
 from safety import classify_confidence, confidence_ratio, propagate_single_segment_sigma, resolve_with_confidence
 
@@ -43,7 +42,6 @@ from safety import classify_confidence, confidence_ratio, propagate_single_segme
 # ---------------------------------------------------------------------------
 
 GLOBAL = GlobalCoefficients()      # k_sh = 0.63, g_grip ∈ [1.0, 1.5], ...
-SCAN_ERROR = ScanErrorConstants()  # σ_T, σ_BAW, ...
 CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
 
 Y_MACHINE_MM = 1000.0        # fixed handle-bottom datum, from floor (field-measured 2026-08, was 1150)
@@ -72,14 +70,17 @@ FIXED_GRIP_SPAN_MM = 520.0   # moulded dual handle, effective span, not adjustab
 BACKREST_RECLINE_DEG = 12.5
 K_SH_EFFECTIVE = GLOBAL.k_sh * math.cos(math.radians(BACKREST_RECLINE_DEG))  # ≈ 0.615
 
+# Field-confirmed 2026-09: 35 / 38 / 41 / 44 / 47 cm from the floor, numbered
+# from the BOTTOM (1 = lowest, 5 = highest). Previously Inverted — every pin
+# the assistant gave was mirrored.
 SEAT_AXIS = MachineAxis(
     name="Seat height",
     axis_type=AxisType.CONGRUENCE,
-    total_holes=5,  # field-confirmed 2026-08: 5 holes, not 7
-    direction=ScaleDirection.INVERTED,  # n=1 = highest seat, n=5 = lowest
+    total_holes=5,
+    direction=ScaleDirection.DIRECT,  # n=1 = lowest seat, n=5 = highest
     alpha_deg=90,
-    p0_mm=470,
-    delta_mm=-30,  # step confirmed on-site
+    p0_mm=350,
+    delta_mm=30,
     reach_min_mm=350,
     reach_max_mm=470,
     coupling=CouplingFlag.INDEPENDENT,
@@ -105,9 +106,20 @@ class ShoulderPressResolution:
 
 
 def _resolve_grip(profile: AnthropometryProfile) -> AxisResolution:
-    """Axis B — Grip width, FIXED (~520mm span). Not adjustable: flag
-    NO_SOLUTION-grip when the fixed span falls outside [BAW, 1.5·BAW]
-    (narrow BAW -> over-abduction risk; wide BAW -> cramped)."""
+    """Axis B — Grip width, FIXED (~520mm span). Not adjustable, so a
+    mismatch against [BAW, 1.5·BAW] is reported as the frame's limit for
+    this body (CLAMPED) with a technique cue — narrow BAW -> handles wide
+    for them (keep elbows forward, don't flare); wide BAW -> handles narrow
+    for them (cramped, stop short if the shoulders pinch).
+
+    REVISED 2026-09-28: this used to return NO_SOLUTION ("machine doesn't
+    fit you") on any mismatch. That's far too strong for a grip that only
+    changes how wide the elbows travel, and the scanner's BAW
+    (shoulder-landmark to shoulder-landmark, i.e. roughly joint centres)
+    reads narrower than true acromion-to-acromion breadth — so the upper
+    bound fired on ordinary narrow-shouldered users. The 1.0-1.5 ratio
+    itself is still illustrative (constants.md).
+    """
     baw = profile.biacromial_width_BAW_mm
     min_grip_mm = GLOBAL.grip_width_ratio_min * baw
     max_grip_mm = GLOBAL.grip_width_ratio_max * baw
@@ -115,28 +127,22 @@ def _resolve_grip(profile: AnthropometryProfile) -> AxisResolution:
     margin_to_min = abs(FIXED_GRIP_SPAN_MM - min_grip_mm)
     margin_to_max = abs(FIXED_GRIP_SPAN_MM - max_grip_mm)
     nearer_ratio = GLOBAL.grip_width_ratio_min if margin_to_min <= margin_to_max else GLOBAL.grip_width_ratio_max
-    sigma_grip = propagate_single_segment_sigma(nearer_ratio, SCAN_ERROR.sigma_BAW_mm)
+    sigma_grip = propagate_single_segment_sigma(nearer_ratio, scan_error_for(profile).sigma_BAW_mm)
     confidence = classify_confidence(
         confidence_ratio(min(margin_to_min, margin_to_max), sigma_grip), CONFIDENCE_THRESHOLDS
     )
 
+    target_mm, cue = None, None
     if FIXED_GRIP_SPAN_MM < min_grip_mm:
-        state = FeasibilityState.NO_SOLUTION
-        note = (
-            f"NO_SOLUTION-grip: fixed {FIXED_GRIP_SPAN_MM:.0f}mm span is narrower than this user's "
-            f"minimum safe grip ({min_grip_mm:.0f}mm) — cramped"
-        )
+        state, target_mm = FeasibilityState.CLAMPED_LOW, min_grip_mm
+        note = f"fixed {FIXED_GRIP_SPAN_MM:.0f}mm span is narrower than this user's shoulders ({min_grip_mm:.0f}mm)"
+        cue = "The handles are narrow for your shoulders: keep your elbows slightly in front of you and stop short if your shoulders pinch."
     elif FIXED_GRIP_SPAN_MM > max_grip_mm:
-        state = FeasibilityState.NO_SOLUTION
-        note = (
-            f"NO_SOLUTION-grip: fixed {FIXED_GRIP_SPAN_MM:.0f}mm span exceeds this user's "
-            f"max safe grip ({max_grip_mm:.0f}mm) — over-abduction risk"
-        )
+        state, target_mm = FeasibilityState.CLAMPED_HIGH, max_grip_mm
+        note = f"fixed {FIXED_GRIP_SPAN_MM:.0f}mm span exceeds 1.5x this user's shoulder width ({max_grip_mm:.0f}mm)"
+        cue = "The handles are wide for your shoulders: keep your elbows slightly forward instead of flaring them out to the sides."
     else:
         state, note = FeasibilityState.IN_RANGE, None
-
-    if state is FeasibilityState.NO_SOLUTION:
-        confidence = ConfidenceTag.HIGH  # NO_SOLUTION is confidence-immune (02, hard rule 2)
 
     return AxisResolution(
         axis_name="Grip width (fixed)",
@@ -145,8 +151,10 @@ def _resolve_grip(profile: AnthropometryProfile) -> AxisResolution:
         state=state,
         confidence=confidence,
         note=note,
+        target_coordinate_mm=target_mm,
         causing_segment="BAW (biacromial width)",
         purpose=AxisPurpose.GRIP_WIDTH_SHOULDER_ABDUCTION,
+        user_cue=cue,
     )
 
 
@@ -188,7 +196,13 @@ def resolve_shoulder_press(
         return ShoulderPressResolution(seat=seat, grip=grip, machine_gated=True, warnings=tuple(warnings))
 
     seat = resolve_congruence_seat(
-        SEAT_AXIS, Y_MACHINE_MM, K_SH_EFFECTIVE, profile.sitting_height_T_mm, SCAN_ERROR.sigma_T_mm, CONFIDENCE_THRESHOLDS
+        SEAT_AXIS,
+        Y_MACHINE_MM,
+        K_SH_EFFECTIVE,
+        profile.sitting_height_T_mm,
+        scan_error_for(profile).sigma_T_mm,
+        CONFIDENCE_THRESHOLDS,
+        datum_label="bottoms of the handles",
     )
     grip = _resolve_grip(profile)
     return ShoulderPressResolution(seat=seat, grip=grip, machine_gated=False, warnings=tuple(warnings))
@@ -233,7 +247,7 @@ if __name__ == "__main__":
 
     assert result_1.machine_gated is False
     assert result_1.seat.state is FeasibilityState.CLAMPED_LOW
-    assert result_1.seat.pin == 5  # Inverted axis: n=5 is the LOWEST physical seat coordinate (5 holes now)
+    assert result_1.seat.pin == 1  # pin 1 = lowest seat
     # BAW=480mm -> safe grip range [480, 720]mm; the fixed 520mm span sits inside it.
     assert result_1.grip.state is FeasibilityState.IN_RANGE
     assert result_1.grip.note is None
@@ -271,7 +285,7 @@ if __name__ == "__main__":
     assert result_2.seat.confidence is ConfidenceTag.HIGH  # confidence-immune
 
     # --- Edge case 3: narrow-shouldered user with a Tier-3 lumbar injury ---
-    # Narrow BAW against the fixed 520mm span -> over-abduction risk (grip NO_SOLUTION);
+    # Narrow BAW against the fixed 520mm span -> handles wide for them (grip CLAMPED_HIGH + cue);
     # lumbar Tier-3 -> partial-gate warning, not a full block.
     narrow_shoulders = AnthropometryProfile(
         user_id="narrow_shoulders",
@@ -299,8 +313,8 @@ if __name__ == "__main__":
     _show("Narrow-shouldered user (Tier-3 lumbar -> partial-gate warning)", result_3)
 
     assert result_3.machine_gated is False
-    assert result_3.grip.state is FeasibilityState.NO_SOLUTION
-    assert "over-abduction" in result_3.grip.note
+    assert result_3.grip.state is FeasibilityState.CLAMPED_HIGH  # a technique cue, not "doesn't fit"
+    assert result_3.grip.user_cue is not None and "elbows" in result_3.grip.user_cue
     assert len(result_3.warnings) == 1 and "partial gate" in result_3.warnings[0]
 
     print("\nAll machines/shoulder_press.py smoke tests passed.")

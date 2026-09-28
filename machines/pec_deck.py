@@ -24,8 +24,8 @@ Run as `python3 -m machines.pec_deck` from the `formfit_spec/` directory.
 from dataclasses import dataclass
 from typing import Literal
 
-from biomechanics import ground_toward_safe_edge, margin_to_reach_boundary, node_position
-from machines.common import AxisResolution, is_tier3, resolve_congruence_seat
+from biomechanics import ground_toward_safe_edge, margin_to_reach_boundary, node_position, pin_label
+from machines.common import AxisResolution, is_tier3, resolve_congruence_seat, scan_error_for
 from models import (
     AnthropometryProfile,
     AxisPurpose,
@@ -44,7 +44,6 @@ from models import (
     MachineName,
     ResistanceProfile,
     ScaleDirection,
-    ScanErrorConstants,
 )
 from safety import apply_injury_filters, resolve_with_confidence
 
@@ -54,16 +53,18 @@ from safety import apply_injury_filters, resolve_with_confidence
 # ---------------------------------------------------------------------------
 
 GLOBAL = GlobalCoefficients()
-SCAN_ERROR = ScanErrorConstants()
 CONFIDENCE_THRESHOLDS = ConfidenceThresholds()
 
 Y_PIVOT_MM = 1050.0          # fixed pivot height, from floor — not re-measured in the 2026-08 field audit
 THETA_CAP_HEALTHY_DEG = 25.0  # healthy-baseline pre-stretch cap
 
+# Field-confirmed again 2026-09 on two machines (57/54/51/48/45/42/39 and
+# 58/55/51/48/45/43/40 cm): numbered from the TOP, 1 = highest, 7 = lowest —
+# matches this Inverted axis.
 SEAT_AXIS = MachineAxis(
     name="Seat height",
     axis_type=AxisType.CONGRUENCE,
-    total_holes=7,  # field-confirmed 2026-08: 7 holes, matches spec — range only was off
+    total_holes=7,
     direction=ScaleDirection.INVERTED,  # n=1 = highest seat, n=7 = lowest
     alpha_deg=90,
     p0_mm=570,
@@ -121,6 +122,7 @@ REAR_DELT_ARM_OPEN_AXIS = MachineAxis(
     reach_max_mm=135,
     safe_direction="less open",
     beta_deg=5,
+    first_pin_label=5,  # the frame numbers all 8 holes in one run: Chest Fly 1-4, Pec Dec / Rear Delt 5-8
 )
 
 SHOULDER_ARM_OPEN_MODIFIER = InjuryModifier(
@@ -213,6 +215,26 @@ def _resolve_chest_fly_arm_open(
             purpose=AxisPurpose.SHOULDER_PRE_STRETCH_CAP,
         )
 
+    injured = is_tier3(shoulder_left) or is_tier3(shoulder_right)
+    if not injured and THETA_CAP_HEALTHY_DEG <= CHEST_FLY_ARM_OPEN_AXIS.reach_min_mm:
+        # The healthy 25° cap sits below the machine's least-open hole (~30°,
+        # estimated), so the least-open hole is simply the recommendation for
+        # everyone — it has nothing to do with this user's proportions, and
+        # reporting it as CLAMPED_LOW made the narration tell every user "this
+        # frame hits its limit for your body" (2026-09-28 population sweep).
+        # The least-open hole is the smallest pre-stretch regardless of the
+        # exact per-hole angles, so this doesn't depend on the estimates.
+        return AxisResolution(
+            axis_name=CHEST_FLY_ARM_OPEN_AXIS.name,
+            pin=1,
+            achieved_coordinate_mm=CHEST_FLY_ARM_OPEN_AXIS.reach_min_mm,
+            state=FeasibilityState.IN_RANGE,
+            confidence=ConfidenceTag.HIGH,
+            note="least-open hole: safest pre-stretch start; per-hole angles still estimated, not measured",
+            target_coordinate_mm=CHEST_FLY_ARM_OPEN_AXIS.reach_min_mm,
+            purpose=AxisPurpose.SHOULDER_PRE_STRETCH_CAP,
+        )
+
     target_theta_cap_deg = min(theta_cap_left, theta_cap_right)  # tighter/less-open side governs
 
     grounded = ground_toward_safe_edge(CHEST_FLY_ARM_OPEN_AXIS, target_theta_cap_deg, safe_direction="lower")
@@ -238,7 +260,7 @@ def _resolve_chest_fly_arm_open(
 
     return AxisResolution(
         axis_name=CHEST_FLY_ARM_OPEN_AXIS.name,
-        pin=grounded.index,
+        pin=pin_label(CHEST_FLY_ARM_OPEN_AXIS, grounded.index),
         achieved_coordinate_mm=grounded.achieved_coordinate_mm,
         state=resolution.state,
         confidence=resolution.confidence,
@@ -266,7 +288,7 @@ def _resolve_rear_delt_arm_open() -> AxisResolution:
     achieved = node_position(REAR_DELT_ARM_OPEN_AXIS, mid_index)
     return AxisResolution(
         axis_name=REAR_DELT_ARM_OPEN_AXIS.name,
-        pin=mid_index,
+        pin=pin_label(REAR_DELT_ARM_OPEN_AXIS, mid_index),
         achieved_coordinate_mm=achieved,
         state=FeasibilityState.IN_RANGE,
         confidence=ConfidenceTag.LOW,
@@ -291,7 +313,13 @@ def resolve_pec_deck(
     """
     injuries = injuries or {}
     seat = resolve_congruence_seat(
-        SEAT_AXIS, Y_PIVOT_MM, GLOBAL.k_sh, profile.sitting_height_T_mm, SCAN_ERROR.sigma_T_mm, CONFIDENCE_THRESHOLDS
+        SEAT_AXIS,
+        Y_PIVOT_MM,
+        GLOBAL.k_sh,
+        profile.sitting_height_T_mm,
+        scan_error_for(profile).sigma_T_mm,
+        CONFIDENCE_THRESHOLDS,
+        datum_label="handles",
     )
     if exercise_mode == "chest_fly":
         arm_open = _resolve_chest_fly_arm_open(
@@ -340,16 +368,13 @@ if __name__ == "__main__":
 
     assert result_1.seat.state is FeasibilityState.CLAMPED_LOW
     assert result_1.seat.pin == 7  # Inverted axis: n=7 is the LOWEST physical seat coordinate
-    # Real finding from this rewrite (2026-08): the healthy-baseline safety
-    # cap (25°) sits BELOW the real machine's least-open Chest Fly position
-    # (30°) — so absent an injury shift (which only ever narrows the cap
-    # further), every user grounds to the same hole regardless of arm
-    # length, since arm length no longer feeds this axis's target at all.
-    # Flagging this tension explicitly rather than papering over it: the
-    # 25° policy constant may need revisiting once real Chest Fly angles are
-    # measured, since it's currently unreachable given the hardware's range.
-    assert result_1.arm_open.state is FeasibilityState.CLAMPED_LOW
+    # The healthy-baseline safety cap (25°) sits BELOW the machine's
+    # least-open Chest Fly position (~30°), so every healthy user gets the
+    # least-open hole — reported as the plain recommendation (IN_RANGE),
+    # not as a proportions-driven clamp (see _resolve_chest_fly_arm_open).
+    assert result_1.arm_open.state is FeasibilityState.IN_RANGE
     assert result_1.arm_open.pin == 1
+    assert result_1.arm_open.causing_segment is None
     assert math.isclose(result_1.arm_open.achieved_coordinate_mm, CHEST_FLY_ARM_OPEN_AXIS.reach_min_mm)
 
     # --- Edge case: Tier-3 shoulder injury at the severity gate -> NO_SOLUTION ---
@@ -393,7 +418,7 @@ if __name__ == "__main__":
     result_4 = resolve_pec_deck(basketball_player, exercise_mode="rear_delt")
     _show("Basketball player (rear_delt)", result_4)
 
-    assert result_4.arm_open.pin == 2
+    assert result_4.arm_open.pin == 6  # hole 2 of the Rear Delt group = number 6 on the frame
     assert result_4.arm_open.confidence is ConfidenceTag.LOW
     assert result_4.arm_open.note is not None and "not yet biomechanically modeled" in result_4.arm_open.note
 

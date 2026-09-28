@@ -12,12 +12,14 @@ Sets handle path onto the target back region (low-sternum path for lat/lower-tra
 |---|---|
 | total_holes | 6 |
 | step_mm | 30 |
-| direction | Inverted (1 = highest, 6 = lowest) |
+| direction | Direct (1 = lowest, 6 = highest) |
 | α | 90° |
-| P₀ (n=1) | 560 |
-| Δ | −30 |
+| P₀ (n=1) | 410 |
+| Δ | +30 |
 | reach_mm | [410, 560] |
 | coupling | Independent |
+
+**Field visit 2026-09:** 41/44/47/50/53/56 cm, pin 1 = lowest — previously coded Inverted, mirroring every pin. Chest pad confirmed fixed; floor to the bottom of its support = 80 cm.
 
 **Field audit 2026-08:** confirmed 6 holes (not 7), reach [410, 560]mm (not [410, 590]mm) — the low end of the range was already right, only the top end moved.
 

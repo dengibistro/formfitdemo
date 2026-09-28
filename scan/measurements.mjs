@@ -85,14 +85,21 @@ function distanceMm(worldLandmarks, indexA, indexB, calibrationFactor) {
 // pixel-ratio approach; rejected a physical reference object for precision).
 // ---------------------------------------------------------------------------
 
-/** MediaPipe's own uncalibrated height estimate, in mm: ear-midpoint to
- * ankle-midpoint (ankle, not heel — heel proved less reliably tracked in
- * real captures; see module docstring). NOTE: this is a known systematic
- * *underestimate* of true standing height (ears sit below the head's
- * crown, ankles sit above the floor) — that's fine here, since this value
- * is only ever used as the denominator of a ratio against the user's real
- * entered height, not reported as a measurement itself. The same proxy
- * convention applies consistently to every user. */
+/** Ear-to-ankle span as a fraction of full standing height: ear (tragion)
+ * sits at ~0.93·H, the ankle (lateral malleolus) at ~0.04·H — standard
+ * anthropometric proportions, a population ratio rather than a
+ * per-person measurement.
+ *
+ * REVISED 2026-09-28: calibration used to divide the entered FULL height
+ * by the model's ear-to-ankle span directly, which silently stretched that
+ * span to full height and inflated every derived segment (F, Ti, A, BAW,
+ * Cd, T) by ~1/0.89 ≈ +12%. The ratio now compares like with like. */
+export const EAR_TO_ANKLE_FRACTION_OF_HEIGHT = 0.89;
+
+/** MediaPipe's own uncalibrated ear-midpoint to ankle-midpoint span, in mm
+ * (ankle, not heel — heel proved less reliably tracked in real captures;
+ * see module docstring). Shorter than true standing height — see
+ * EAR_TO_ANKLE_FRACTION_OF_HEIGHT for how calibration accounts for that. */
 export function estimateModelHeightMm(frontWorldLandmarks) {
   const L = POSE_LANDMARK;
   const earMid = midpoint(frontWorldLandmarks[L.LEFT_EAR], frontWorldLandmarks[L.RIGHT_EAR]);
@@ -100,7 +107,8 @@ export function estimateModelHeightMm(frontWorldLandmarks) {
   return distance2D(earMid, ankleMid) * 1000;
 }
 
-/** entered_H / model_estimated_H — the single per-session scale correction,
+/** expected ear-to-ankle span (entered H × EAR_TO_ANKLE_FRACTION_OF_HEIGHT)
+ * / model ear-to-ankle span — the single per-session scale correction,
  * derived once from the front-standing capture and reused for every other
  * segment across all three captures (see module docstring). */
 export function computeCalibrationFactor(frontWorldLandmarks, userHeightMm) {
@@ -111,7 +119,7 @@ export function computeCalibrationFactor(frontWorldLandmarks, userHeightMm) {
   if (!(modelHeightMm > 0)) {
     throw new Error("could not estimate a model height from the front capture (degenerate landmarks)");
   }
-  return userHeightMm / modelHeightMm;
+  return (userHeightMm * EAR_TO_ANKLE_FRACTION_OF_HEIGHT) / modelHeightMm;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,16 +149,39 @@ export function computeFrontMeasurementsMm(frontWorldLandmarks, calibrationFacto
 }
 
 // ---------------------------------------------------------------------------
-// Side-seated capture -> T (sitting height): ear-midpoint to hip-midpoint,
-// the torso length that actually drives seat height on press/pull machines
-// (Seat = Y_machine - k_sh*T) — see chest_press.py etc.
+// Side-seated capture -> T (sitting height).
+//
+// What every seated machine actually needs is the shoulder (GH) joint's
+// height above the seat — the engine computes it as k_sh·T (constants.md:
+// k_sh = "GH-joint height above seat ÷ sitting height", with T the standard
+// seat-to-crown sitting height). So measure that shoulder height directly
+// (shoulder-midpoint to hip-midpoint, plus the hip joint's fixed offset
+// above the seat surface) and express it back as T = height / k_sh — the
+// engine's k_sh·T then recovers exactly what was measured.
+//
+// REVISED 2026-09-28: this used to return ear-midpoint to hip-midpoint as T
+// directly. That's a different segment (~0.40·H, not the ~0.52·H seat-to-
+// crown height k_sh is defined against), so every seat target came out
+// several holes too high — nearly every user landed on pin 1 / CLAMPED_HIGH.
 // ---------------------------------------------------------------------------
 
-export function computeSittingHeightMm(seatedWorldLandmarks, calibrationFactor) {
+/** constants.md `k_sh` — must stay in sync with models.py's GlobalCoefficients. */
+export const K_SH = 0.63;
+
+/** Seated hip joint centre above the (compressed) seat surface, mm —
+ * anthropometric population value, not measured per person; pose landmarks
+ * have no point on the seat itself to measure it from. */
+export const HIP_JOINT_ABOVE_SEAT_MM = 90;
+
+export function computeShoulderHeightAboveSeatMm(seatedWorldLandmarks, calibrationFactor) {
   const L = POSE_LANDMARK;
-  const earMid = midpoint(seatedWorldLandmarks[L.LEFT_EAR], seatedWorldLandmarks[L.RIGHT_EAR]);
+  const shoulderMid = midpoint(seatedWorldLandmarks[L.LEFT_SHOULDER], seatedWorldLandmarks[L.RIGHT_SHOULDER]);
   const hipMid = midpoint(seatedWorldLandmarks[L.LEFT_HIP], seatedWorldLandmarks[L.RIGHT_HIP]);
-  return distance2D(earMid, hipMid) * 1000 * calibrationFactor;
+  return distance2D(shoulderMid, hipMid) * 1000 * calibrationFactor + HIP_JOINT_ABOVE_SEAT_MM;
+}
+
+export function computeSittingHeightMm(seatedWorldLandmarks, calibrationFactor) {
+  return computeShoulderHeightAboveSeatMm(seatedWorldLandmarks, calibrationFactor) / K_SH;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +282,54 @@ export function segmentConfidenceSigmaMm(baseSigmaMm, involvedLandmarks) {
  * input. Applied on top of (not instead of) the visibility-based inflation. */
 export const CD_CONFIDENCE_PENALTY_MULTIPLIER = 1.5;
 
+/** constants.md / models.py ScanErrorConstants defaults, mm — the σ of each
+ * segment when every landmark behind it was clearly seen. */
+export const BASE_SIGMA_MM = Object.freeze({ T: 15, F: 15, Ti: 15, A: 18, BAW: 20, Cd: 20 });
+
+/** In a true side profile the far-side landmark is always occluded (that's
+ * how rotation is detected), so side-pose segments are judged on the
+ * better-seen landmark of each L/R pair. */
+function nearSide(worldLandmarks, leftIndex, rightIndex) {
+  const left = worldLandmarks[leftIndex], right = worldLandmarks[rightIndex];
+  return left.visibility >= right.visibility ? left : right;
+}
+
+/** This scan's σ per segment, in the wire shape of models.py's
+ * ScanSigmaOverrides — sent with the profile so the engine's confidence
+ * reflects how well *this* scan saw the body, not a fixed guess.
+ *
+ * T is derived (shoulder height above seat / K_SH — see
+ * computeSittingHeightMm), so its σ is the shoulder-height measurement's σ
+ * divided by K_SH: that way k_sh·σ_T, the seat-height σ the engine
+ * computes, equals the σ of what was actually measured. Bilateral segments
+ * report the worse of the two sides. */
+export function computeScanSigmaMm(frontWorld, seatedWorld, sideStandingWorld) {
+  const L = POSE_LANDMARK;
+  const sigma = (base, landmarks) => segmentConfidenceSigmaMm(base, landmarks);
+  const worseSide = (base, leftIdx, rightIdx) =>
+    Math.max(sigma(base, leftIdx.map((i) => frontWorld[i])), sigma(base, rightIdx.map((i) => frontWorld[i])));
+  return {
+    sigma_T_mm:
+      sigma(BASE_SIGMA_MM.T, [
+        nearSide(seatedWorld, L.LEFT_SHOULDER, L.RIGHT_SHOULDER),
+        nearSide(seatedWorld, L.LEFT_HIP, L.RIGHT_HIP),
+      ]) / K_SH,
+    sigma_F_mm: worseSide(BASE_SIGMA_MM.F, [L.LEFT_HIP, L.LEFT_KNEE], [L.RIGHT_HIP, L.RIGHT_KNEE]),
+    sigma_Ti_mm: worseSide(BASE_SIGMA_MM.Ti, [L.LEFT_KNEE, L.LEFT_ANKLE], [L.RIGHT_KNEE, L.RIGHT_ANKLE]),
+    sigma_A_mm: worseSide(
+      BASE_SIGMA_MM.A,
+      [L.LEFT_SHOULDER, L.LEFT_ELBOW, L.LEFT_WRIST],
+      [L.RIGHT_SHOULDER, L.RIGHT_ELBOW, L.RIGHT_WRIST],
+    ),
+    sigma_BAW_mm: sigma(BASE_SIGMA_MM.BAW, [frontWorld[L.LEFT_SHOULDER], frontWorld[L.RIGHT_SHOULDER]]),
+    sigma_Cd_mm:
+      sigma(BASE_SIGMA_MM.Cd, [
+        nearSide(sideStandingWorld, L.LEFT_SHOULDER, L.RIGHT_SHOULDER),
+        nearSide(sideStandingWorld, L.LEFT_HIP, L.RIGHT_HIP),
+      ]) * CD_CONFIDENCE_PENALTY_MULTIPLIER,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Smoke test — mirrors this project's Python `if __name__ == "__main__":`
 // convention. Synthetic landmark data with hand-verifiable geometry (mostly
@@ -324,9 +403,13 @@ function buildFrontLandmarks() {
 function buildSeatedLandmarks() {
   const L = POSE_LANDMARK;
   const arr = new Array(33).fill(null).map(() => landmark(0, 0, 0));
-  // earMid(0.2,1.5) -> hipMid(0.2,0.6) => 900mm (pure vertical delta).
+  // shoulderMid(0.2,1.1) -> hipMid(0.2,0.6) => 500mm (pure vertical delta).
+  // Ears placed well above the shoulders so a regression back to ear-hip
+  // would fail the assertion instead of passing by coincidence.
   arr[L.LEFT_EAR] = landmark(0.1, 1.5, 500);
   arr[L.RIGHT_EAR] = landmark(0.3, 1.5, -500);
+  arr[L.LEFT_SHOULDER] = landmark(0.1, 1.1, 300);
+  arr[L.RIGHT_SHOULDER] = landmark(0.3, 1.1, -300);
   arr[L.LEFT_HIP] = landmark(0.1, 0.6, -600);
   arr[L.RIGHT_HIP] = landmark(0.3, 0.6, 600);
   return arr;
@@ -341,7 +424,7 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
   const front = buildFrontLandmarks();
   approxEqual(estimateModelHeightMm(front), 5000, EPS, "estimateModelHeightMm");
   const calibrationFactor = computeCalibrationFactor(front, 1750);
-  approxEqual(calibrationFactor, 0.35, EPS, "computeCalibrationFactor (1750mm entered / 5000mm model)");
+  approxEqual(calibrationFactor, 0.3115, EPS, "computeCalibrationFactor (1750mm × 0.89 expected ear-ankle / 5000mm model)");
 
   try {
     computeCalibrationFactor(front, 0);
@@ -381,8 +464,11 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
 
   // --- Seated capture -> T ---
   const seated = buildSeatedLandmarks();
-  approxEqual(computeSittingHeightMm(seated, 1.0), 900, EPS, "computeSittingHeightMm (factor=1)");
-  approxEqual(computeSittingHeightMm(seated, 2.0), 1800, EPS, "computeSittingHeightMm (factor=2)");
+  approxEqual(computeShoulderHeightAboveSeatMm(seated, 1.0), 590, EPS, "shoulder above seat (500 + 90, factor=1)");
+  approxEqual(computeShoulderHeightAboveSeatMm(seated, 2.0), 1090, EPS, "shoulder above seat (1000 + 90, factor=2)");
+  approxEqual(computeSittingHeightMm(seated, 1.0), 590 / K_SH, EPS, "computeSittingHeightMm (factor=1)");
+  // Round-trip contract with the engine: k_sh·T must give back the measured shoulder height.
+  approxEqual(K_SH * computeSittingHeightMm(seated, 2.0), 1090, EPS, "k_sh·T round-trip (factor=2)");
   console.log("sitting height: OK");
 
   // --- Mask row width ---
@@ -426,6 +512,22 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
   approxEqual(segmentConfidenceSigmaMm(15, [landmark(0, 0, 0, -0.2)]), 15 * 4.6, EPS, "sigma (clamped negative visibility)");
   approxEqual(CD_CONFIDENCE_PENALTY_MULTIPLIER, 1.5, EPS, "CD_CONFIDENCE_PENALTY_MULTIPLIER");
   console.log("dynamic confidence sigma: OK");
+
+  // --- Per-scan sigma bundle ---
+  const allVisible = buildFrontLandmarks();
+  const seatedForSigma = buildSeatedLandmarks();
+  // Side pose: far-side shoulder/hip occluded (visibility 0) — must not inflate T/Cd.
+  seatedForSigma[L.RIGHT_SHOULDER] = landmark(0.3, 1.1, 0, 0.0);
+  seatedForSigma[L.RIGHT_HIP] = landmark(0.3, 0.6, 0, 0.0);
+  const clean = computeScanSigmaMm(allVisible, seatedForSigma, seatedForSigma);
+  approxEqual(clean.sigma_T_mm, 15 / K_SH, EPS, "sigma_T (derived, near side clear)");
+  approxEqual(K_SH * clean.sigma_T_mm, 15, EPS, "k_sh·σ_T = shoulder-height σ");
+  approxEqual(clean.sigma_F_mm, 15, EPS, "sigma_F (both sides clear)");
+  approxEqual(clean.sigma_Cd_mm, 30, EPS, "sigma_Cd (base 20 × 1.5 penalty)");
+  const blurryKnee = buildFrontLandmarks();
+  blurryKnee[L.RIGHT_KNEE] = landmark(0.9, -0.8, 0, 0.4);
+  approxEqual(computeScanSigmaMm(blurryKnee, seatedForSigma, seatedForSigma).sigma_F_mm, 45, EPS, "sigma_F (worse side governs)");
+  console.log("per-scan sigma bundle: OK");
 
   console.log("\nAll scan/measurements.mjs smoke tests passed.");
   }

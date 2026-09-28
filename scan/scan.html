@@ -220,7 +220,7 @@
 </div>
 
 <script type="module">
-import { POSE_LANDMARK, computeCalibrationFactor, computeFrontMeasurementsMm, computeSittingHeightMm, computeChestDepthMm } from "./measurements.mjs";
+import { POSE_LANDMARK, computeCalibrationFactor, computeFrontMeasurementsMm, computeSittingHeightMm, computeChestDepthMm, computeScanSigmaMm } from "./measurements.mjs";
 import { evaluateCaptureQuality, averageLandmarksOverWindow, estimateFacingRotationRatio, estimateProfileVisibilityAsymmetry, estimateFramingIssue } from "./quality_gates.mjs";
 import { detectPoseInVideoFrame, maskToPlainData, estimateAverageLuminance, startCamera, stopCamera } from "./mediapipe_runner.mjs";
 import { createCaptureFlow, currentPoseKind, isFlowComplete, progressText, currentInstructions, advanceAfterCapture, requestRedo } from "./capture_flow.mjs";
@@ -552,11 +552,14 @@ const MEASUREMENT_FIELDS = [
   { key: "arm_L_mm", label: "Left arm" },
   { key: "arm_R_mm", label: "Right arm" },
   { key: "biacromial_width_mm", label: "Shoulder width" },
-  { key: "sitting_height_T_mm", label: "Sitting height (seat reference)" },
+  { key: "sitting_height_T_mm", label: "Sitting height (seat to top of head)" },
   { key: "chest_depth_Cd_mm", label: "Chest depth", note: "Lower-confidence estimate — worth double-checking" },
 ];
 
 let measurementInputs = {};
+// This scan's own σ per segment (computeScanSigmaMm), sent alongside the
+// measurements so the engine's confidence reflects this scan's quality.
+let scanSigma = null;
 
 function computeMeasurements() {
   if (!captures.front) throw new Error("front-standing not captured yet");
@@ -576,6 +579,11 @@ function computeMeasurements() {
       ...captures.side_standing.maskData,
     },
     calibrationFactor,
+  );
+  scanSigma = computeScanSigmaMm(
+    captures.front.worldLandmarks,
+    captures.side_seated.worldLandmarks,
+    captures.side_standing.worldLandmarks,
   );
   return result;
 }
@@ -656,6 +664,7 @@ function buildProfilePayload() {
     arm: { left_mm: mm.arm_L_mm, right_mm: mm.arm_R_mm, single_sided: false },
     biacromial_width_BAW_mm: mm.biacromial_width_mm,
     chest_depth_Cd_mm: mm.chest_depth_Cd_mm,
+    scan_sigma_mm: scanSigma,
   };
 }
 

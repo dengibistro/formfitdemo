@@ -201,6 +201,42 @@ def ground_to_hole(
     return ground_toward_safe_edge(axis, target_coordinate_mm, safe_direction=safe_direction)
 
 
+def pin_label(axis: MachineAxis, n: int) -> int:
+    """The number printed on the machine for hole index `n` (1-based) — what
+    the user is told to set. Differs from `n` only where the machine's
+    numbering doesn't start at 1 (see MachineAxis.first_pin_label)."""
+    return n - 1 + axis.first_pin_label
+
+
+@dataclass(frozen=True)
+class PinDecision:
+    """How close a congruence target sits to flipping onto a neighbouring hole."""
+
+    margin_mm: float  # distance from the target to the rounding boundary with the nearest neighbour
+    neighbour_index: int | None  # that neighbouring hole (None on a single-hole axis)
+
+
+def pin_decision_margin(axis: MachineAxis, target_coordinate_mm: float, chosen_index: int) -> PinDecision:
+    """For nearest-node (congruence) rounding, the decision a scan error can
+    flip is *which hole* — so the relevant boundary is the midpoint between
+    the chosen hole and its closest neighbour, not the edge of the axis's
+    reach (02_anthropometry.md: M is the distance to the nearest *decision*
+    boundary).
+
+    REVISED 2026-09-28: congruence axes used `margin_to_reach_boundary`,
+    which rated a target sitting exactly between two holes as HIGH
+    confidence as long as it was far from the reach edges — ~2/3 of a
+    typical population was within 1σ of the neighbouring pin while tagged
+    HIGH.
+    """
+    neighbours = [n for n in (chosen_index - 1, chosen_index + 1) if 1 <= n <= axis.total_holes]
+    if not neighbours:
+        return PinDecision(margin_mm=math.inf, neighbour_index=None)
+    neighbour = min(neighbours, key=lambda n: abs(node_position(axis, n) - target_coordinate_mm))
+    midpoint = (node_position(axis, chosen_index) + node_position(axis, neighbour)) / 2
+    return PinDecision(margin_mm=abs(target_coordinate_mm - midpoint), neighbour_index=neighbour)
+
+
 def margin_to_reach_boundary(axis: MachineAxis, target_coordinate_mm: float) -> float:
     """M — distance from a continuous target coordinate to the nearer edge of
     the axis's reach, the "decision boundary" a confidence margin is measured
@@ -322,5 +358,21 @@ if __name__ == "__main__":
     except ValueError:
         pass
     print("Dispatch + guard rails: OK")
+
+    # --- Pin labels + decision margin ---
+    assert pin_label(seat_axis, 1) == 1
+    zero_based = seat_axis.model_copy(update={"first_pin_label": 0})
+    assert pin_label(zero_based, 1) == 0 and pin_label(zero_based, 7) == 6
+
+    # Holes 610, 580, 550, 520, ... : target 530 rounds to 520 (n=4); boundary with 550 (n=3) is at 535.
+    between = pin_decision_margin(seat_axis, 530, chosen_index=4)
+    assert math.isclose(between.margin_mm, 5.0) and between.neighbour_index == 3
+    # Exactly on a node: a full half-step from either boundary.
+    on_node = pin_decision_margin(seat_axis, 520, chosen_index=4)
+    assert math.isclose(on_node.margin_mm, 15.0)
+    # Far below reach, clamped to the last hole: the boundary with n=6 is far away.
+    clamped = pin_decision_margin(seat_axis, 300, chosen_index=7)
+    assert math.isclose(clamped.margin_mm, 145.0) and clamped.neighbour_index == 6
+    print("Pin labels + decision margin: OK")
 
     print("\nAll biomechanics.py smoke tests passed.")
