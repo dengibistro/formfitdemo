@@ -33,7 +33,7 @@ from google import genai
 
 import storage
 from machines.explanations import ExplanationFacts
-from machines.narration_common import SYSTEM_PROMPT, setup_context_message
+from machines.narration_common import SYSTEM_PROMPT, setup_context_message, strip_dashes
 
 MODEL = "gemini-3-flash-preview"
 # REVISED 2026-07-09: "gemini-2.5-flash" was retired from the Interactions
@@ -83,7 +83,7 @@ def _call_gemini(user_id: str, user_text: str) -> str:
         raise RuntimeError(f"Gemini interaction did not complete: status={interaction.status!r}")
 
     storage.set_last_interaction_id(user_id, interaction.id)
-    return interaction.output_text or ""
+    return strip_dashes(interaction.output_text or "")
 
 
 def narrate_setup(

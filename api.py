@@ -214,8 +214,8 @@ def _needs_rescan(profile: AnthropometryProfile) -> bool:
 
 
 _RESCAN_REPLY = (
-    "We've improved how the scan measures you, so your old measurements would give "
-    "the wrong seat settings. Please redo your scan (about a minute) and I'll set you up properly."
+    "Heads up: we've improved the scan, and your old measurements would give you the "
+    "wrong seat settings. Redo your scan (takes about a minute) and I'll set you up properly."
 )
 
 
@@ -421,16 +421,15 @@ class AssistantReply(BaseModel):
 # "not supported yet" reply here rather than computed and served.
 _UNSUPPORTED_MACHINES: dict[str, str] = {
     "leg_press": (
-        "Leg press isn't set up in this test version yet — it needs a quick "
-        "mobility check we haven't built. Ask me about any other machine!"
+        "Leg press isn't ready yet. It needs a quick mobility check we haven't built. "
+        "Ask me about another machine!"
     ),
     "leg_curl": (
-        "Leg curl is being re-measured after a hardware change — not available "
-        "in this test version yet. Ask me about any other machine!"
+        "Leg curl isn't ready yet, we're re-measuring it after a hardware change. "
+        "Ask me about another machine!"
     ),
     "leg_extension": (
-        "Leg extension isn't available in this test version yet — ask me about "
-        "any other machine!"
+        "Leg extension isn't ready yet. Ask me about another machine!"
     ),
     # 2026-09-28 population sweep: the fixed-bar reach check told nearly
     # everyone under ~190cm the machine doesn't fit them (the bar is meant to
@@ -438,15 +437,13 @@ _UNSUPPORTED_MACHINES: dict[str, str] = {
     # thigh-pad axis is still in the pre-audit reference frame (see
     # lat_pulldown.py). Gated until both are re-modeled.
     "lat_pulldown": (
-        "Lat pulldown is being re-measured — not available in this test version yet. "
-        "Ask me about any other machine!"
+        "Lat pulldown isn't ready yet, we're still measuring it. Ask me about another machine!"
     ),
     # 2026-09-28 population sweep: y_target_mm (api.py's _SEATED_ROW_FRAME) was
     # never measured on-site, and the illustrative 1180mm put everyone under
     # ~190cm on the top seat hole. Gated until it's measured.
     "seated_row": (
-        "Seated row is being re-measured — not available in this test version yet. "
-        "Ask me about any other machine!"
+        "Seated row isn't ready yet, we're still measuring it. Ask me about another machine!"
     ),
 }
 
@@ -488,7 +485,7 @@ def assistant_message(user_id: str, body: AssistantMessage) -> AssistantReply:
         storage.log_message(user_id, "bot", kind="clarify")
         return AssistantReply(
             kind="clarify",
-            reply=f"Just to make sure I set up the right one — did you mean {friendly}?",
+            reply=f"Which one did you mean, {friendly}?",
         )
 
     reply = gemini_chat(user_id, body.message)

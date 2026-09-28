@@ -3,18 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ironclad Fitness</title>
+<title>FitHub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
-  /* Design tokens lifted from the user's earlier Lovable/Vercel prototype
-     (form-fit-roan.vercel.app) — real HSL values extracted from its
-     shipped CSS. Applied to the WHOLE app now, home shell included (per
-     the user's screenshot of that prototype: light theme throughout, not
-     just inside FormFit's own flow — an earlier version of this file kept
-     the home shell dark/monochrome on purpose, that decision is reversed
-     now that the user showed what they actually wanted it to look like). */
+  /* Design tokens from the original FormFit prototype. Light theme everywhere. */
   :root {
     color-scheme: light;
     --background: 0 0% 100%;
@@ -44,8 +38,8 @@
   }
   p { color: hsl(var(--muted-foreground)); line-height: 1.5; margin: 0; }
 
-  /* ---- Zone 4 (redesigned): home screen shell ---- */
-  #screenHome { padding-bottom: 84px; } /* clears the fixed bottom tab bar */
+  /* ---- Home screen (made-up gym app shell) ---- */
+  #screenHome { padding-bottom: 84px; } /* room for the fixed tab bar */
   .home-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 0; }
   .home-header-brand { display: flex; align-items: center; gap: 10px; }
   .app-logo {
@@ -95,9 +89,8 @@
   .section-heading { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; }
   .section-heading-muted { font-size: 12px; letter-spacing: 0.04em; color: hsl(var(--muted-foreground)); text-transform: uppercase; }
 
-  /* FormFit featured card — deliberately the one splash of colour on an
-     otherwise neutral/light shell, so it reads as a different, partnered
-     app embedded here, not just another card of the gym's own UI. */
+  /* The FormFit card is the only colourful thing on the home screen, so it
+     reads as a partner feature inside the gym's app. */
   #formfitTile {
     display: block; text-align: left; border: none; border-radius: var(--radius); padding: 20px;
     cursor: pointer; color: white; width: 100%;
@@ -151,10 +144,8 @@
   }
   #nameError.status-banner { background: hsl(0 84% 97%); color: hsl(var(--destructive)); border-color: hsl(0 84% 90%); }
 
-  /* FormFit-flow buttons (name entry, is-this-you, splash) — scoped to
-     NOT touch the home shell's own `.quick-action`/`#formfitTile`/
-     `.tab-item` (all more specific selectors, so they still win their
-     own look). */
+  /* Buttons in the FormFit flow. Scoped to these screens so the home shell
+     keeps its own button styles. */
   #screenNameEntry button, #screenIsThisYou button {
     font-family: inherit; font-size: 16px; font-weight: 700; padding: 14px 18px; border-radius: 10px;
     border: none; cursor: pointer; color: white; width: 100%;
@@ -175,21 +166,8 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   #splashText { text-align: center; color: hsl(220 9% 46%); }
 
-  /* Zone 6 chat UI, redesigned 2026-08-08 against form-fit-roan.vercel.app's
-     own interactive chat demo (its visible marketing page is a single
-     static route with no chat screen rendered — the real component tree
-     was pulled out of its built JS bundle directly, same "fetch the raw
-     asset, don't trust an AI summary of it" approach as the earlier
-     Lovable-token extraction). Two structural problems this fixes: the
-     chat screen used to live inside `.app`'s 20px-padded, content-sized
-     column like every other screen, so it never reached the edges of the
-     device and left dead space below a short thread; and there was no way
-     back to the home screen once inside chat. `position: fixed` on
-     `#screenChat` escapes `.app`'s flex/padding entirely (no ancestor
-     creates a containing block for it), while `max-width: 480px` keeps
-     the same "mobile app frame centered on desktop" look the rest of the
-     app already commits to — this is a viewport-height fix, not a
-     full-bleed-on-desktop redesign. */
+  /* The chat is position: fixed so it fills the screen height and escapes
+     .app's padding. max-width keeps it phone-sized on desktop. */
   #screenChat {
     position: fixed; inset: 0; z-index: 20;
     width: 100%; max-width: 480px; margin: 0 auto;
@@ -240,10 +218,8 @@
     padding: 2px 5px; border-radius: 999px; line-height: 1.4;
   }
 
-  /* Photo picker button, left of the chat input — opens #pickerOverlay.
-     Selector needs 2 classes' worth of specificity to beat the generic
-     `.chat-input-row button` rule below it (which would otherwise paint
-     this the same primary-blue as the send button). */
+  /* Photo picker button next to the chat input. Needs two classes to beat
+     the generic .chat-input-row button rule below. */
   .chat-input-row .picker-open-btn {
     width: 42px; height: 42px; flex-shrink: 0; padding: 0; border-radius: 50%;
     background: hsl(var(--card)); color: hsl(var(--foreground)); border: 1px solid hsl(var(--border));
@@ -251,9 +227,7 @@
     cursor: pointer; box-shadow: none;
   }
 
-  /* Full-screen "choose by photo" picker — same fixed/full-viewport,
-     480px-max-width-centered treatment as #screenChat, stacked above it
-     (higher z-index) since it opens on top of the chat, not instead of it. */
+  /* Full-screen photo picker. Same layout as the chat, stacked on top of it. */
   .picker-overlay {
     position: fixed; inset: 0; z-index: 30;
     width: 100%; max-width: 480px; margin: 0 auto;
@@ -266,14 +240,8 @@
     display: flex; align-items: center; gap: 10px;
   }
   .picker-title { font-family: "Barlow Condensed", Inter, sans-serif; font-size: 19px; font-weight: 700; text-transform: uppercase; }
-  /* Compact vertical list (not a photo grid) — small fixed-size thumbnail
-     per row rather than a big square, so more machines fit on screen at
-     once and scanning by name+photo together reads faster than a grid of
-     tiles. Explicit pixel width/height on the thumbnail (not aspect-ratio)
-     is deliberate: an aspect-ratio-sized image as a grid/flex child hit a
-     real Chromium track-sizing bug earlier (rows silently overlapped) —
-     a fixed-size thumbnail in a simple flex row sidesteps that whole class
-     of bug rather than re-risking it. */
+  /* Simple list with small fixed-size thumbnails. Fixed pixel sizes on
+     purpose: an aspect-ratio image in a grid made rows overlap in Chrome. */
   .picker-grid {
     flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
     display: flex; flex-direction: column; gap: 8px; padding: 16px;
@@ -335,9 +303,7 @@
   .chat-bubble-thinking span:nth-child(3) { animation-delay: 0.3s; }
   @keyframes pulseDot { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
 
-  /* Thumbs up/down under a bot reply — see attachFeedbackUI(). A separate
-     row under the bubble, not inside it, so it works identically after
-     both a plain chat-bubble reply and a machine-setup card. */
+  /* Thumbs up/down row under a bot reply (see attachFeedbackUI). */
   .feedback-row { align-self: flex-start; display: flex; align-items: center; gap: 6px; margin-top: -4px; }
   .feedback-btn {
     background: none; border: 1px solid hsl(var(--border)); border-radius: 999px;
@@ -355,10 +321,8 @@
     background: hsl(var(--primary)); border: none; border-radius: 8px; padding: 0 12px; cursor: pointer;
   }
 
-  /* Structured machine-setup card. "Your Setup" rows are rendered directly
-     from the API's `facts` array (already-computed, exact values) — never
-     from the LLM's own phrasing of numbers, so the figures shown here
-     can't drift from what the engine actually decided. */
+  /* Machine setup card. The "Your Setup" numbers come straight from the
+     engine, never from the model's wording, so they can't drift. */
   .chat-bubble-setup {
     flex-shrink: 0; max-width: 92%; padding: 0; overflow: hidden; border-radius: 16px;
     background: hsl(var(--card)); box-shadow: 0 2px 12px -4px hsl(231 80% 30% / .18);
@@ -404,11 +368,8 @@
 <body>
 <div class="app">
 
-  <!-- Zone 4 (redesigned to match the user's earlier Lovable prototype
-       screenshot): fake generic gym-app home screen. Everything here is
-       decorative/non-functional except the FormFit card/tab — this shell
-       exists purely to make FormFit feel like a partnered feature inside
-       a real gym's app, not a standalone demo. -->
+  <!-- Home screen of a made-up gym app. Only the FormFit card and tab do
+       anything, the rest is decoration. -->
   <section id="screenHome" class="screen">
     <div class="home-header">
       <div class="home-header-brand">
@@ -475,10 +436,10 @@
     </button>
   </section>
 
-  <!-- Zone 5: FormFit's own entry flow. -->
+  <!-- FormFit entry flow -->
   <section id="screenNameEntry" class="screen" hidden>
     <h1>Welcome to FormFit</h1>
-    <p>Enter your name to get started — this is how we'll find your saved
+    <p>Enter your name to get started. We'll use it to find your
     measurements next time.</p>
     <label class="field">Your name
       <input id="nameInput" type="text" placeholder="e.g. Jake" />
@@ -501,10 +462,7 @@
     </div>
   </section>
 
-  <!-- Zone 6: the real chat UI. Both the "yes that's me" returning-user
-       path and scan.html's post-scan handoff land here. Fixed/full-viewport
-       (see #screenChat's own CSS comment) instead of living inside .app's
-       padded column like the other screens. -->
+  <!-- Chat. Returning users and people coming back from the scan both land here. -->
   <section id="screenChat" class="screen" hidden>
     <header class="chat-header">
       <button id="chatBackBtn" class="chat-back-btn" type="button" aria-label="Back to home">←</button>
@@ -538,14 +496,8 @@
 
 </div>
 
-<!-- Full-screen equipment picker with real machine photos — for anyone who
-     doesn't recognise a machine by name. Sits above #screenChat (higher
-     z-index), opened via the 🖼️ button next to the chat input, tapping a
-     tile sends that machine's name exactly like tapping an equipment-strip
-     chip already does. Separate top-level fixed overlay (not nested inside
-     #screenChat) so it can cover the whole viewport including the chat
-     header, same "position:fixed escapes .app's layout" trick used for
-     #screenChat itself. -->
+<!-- Full-screen machine picker with photos, for people who don't know a
+     machine by name. Tapping one sends its name, same as the chips. -->
 <section id="pickerOverlay" class="picker-overlay" hidden>
   <header class="picker-header">
     <button id="pickerCloseBtn" class="chat-back-btn" type="button" aria-label="Close">←</button>
@@ -554,10 +506,7 @@
   <div id="pickerGrid" class="picker-grid"></div>
 </section>
 
-<!-- Fixed bottom tab bar — only shown on the home screen (toggled
-     alongside screen switching in the script below). Home/FormFit are
-     the only tabs that do anything; the rest are decorative, matching
-     the rest of this fake host-app shell. -->
+<!-- Bottom tab bar, home screen only. Only Home and FormFit do anything. -->
 <nav id="bottomTabBar" class="bottom-tab-bar">
   <div class="bottom-tab-bar-inner">
     <button class="tab-item tab-item-active" type="button"><span class="tab-icon">🏠</span><span class="tab-label">Home</span></button>
@@ -571,7 +520,7 @@
 <script type="module">
 import { preloadPoseLandmarker } from "/scan/mediapipe_runner.mjs";
 
-const API_BASE = window.location.origin; // this page and api.py are the same origin/process
+const API_BASE = window.location.origin; // same origin as the API
 
 const screenHome = document.getElementById("screenHome");
 const screenNameEntry = document.getElementById("screenNameEntry");
@@ -581,9 +530,7 @@ const screenChat = document.getElementById("screenChat");
 const ALL_SCREENS = [screenHome, screenNameEntry, screenIsThisYou, screenSplash, screenChat];
 
 const greetingName = document.getElementById("greetingName");
-// Only known once someone has actually gone through the FormFit name-entry
-// flow at least once on this device (see goToSplash) — generic fallback
-// otherwise, never a fake name.
+// Name from the last time someone went through FormFit on this device, if any.
 const savedDisplayName = localStorage.getItem("formfit_display_name");
 if (savedDisplayName) greetingName.textContent = `${savedDisplayName} 👋`;
 
@@ -610,14 +557,11 @@ pickerCloseBtn.addEventListener("click", () => { pickerOverlay.hidden = true; })
 
 function showScreen(target) {
   for (const screen of ALL_SCREENS) screen.hidden = screen !== target;
-  // The fixed bottom tab bar is only part of the home screen's own look
-  // (see the reference screenshot) — hidden everywhere else.
+  // The tab bar belongs to the home screen only.
   bottomTabBar.hidden = target !== screenHome;
 }
 
-// Decorative-only: the other tab-bar/quick-action buttons don't do
-// anything — matches the rest of this fake host-app shell, only
-// FormFit is real.
+// The other home screen buttons are decoration. Only FormFit works.
 function enterFormFit() {
   showScreen(screenNameEntry);
   nameInput.focus();
@@ -626,28 +570,22 @@ document.getElementById("formfitTile").addEventListener("click", enterFormFit);
 document.getElementById("formfitTabItem").addEventListener("click", enterFormFit);
 
 let pendingName = null;
-// Set by the /exists check: this returning user's saved scan predates the
-// measurement fix (api.py's SCAN_FORMULA_FIXED_ON), so "yes, that's me"
-// sends them back through the scan instead of into chat.
+// True when the saved scan is older than the scan fix (api.py's
+// SCAN_FORMULA_FIXED_ON), so "yes, that's me" goes back through the scan.
 let pendingNeedsRescan = false;
 
 function goToSplash(name, returning) {
   pendingName = name;
-  // As-typed casing (before the backend lowercases it for lookup) — used
-  // only for the home screen's own greeting, never sent anywhere.
+  // Name as typed, for the home screen greeting. Never sent anywhere.
   localStorage.setItem("formfit_display_name", name);
   showScreen(screenSplash);
   splashText.textContent = returning
-    ? "Welcome back — getting your setup ready…"
+    ? "Welcome back! Getting your setup ready…"
     : "Getting things ready for your scan…";
 
-  // Kick off the MediaPipe WASM+model download now, in the background,
-  // while the splash shows — solves the earlier real-device finding that
-  // the first camera-step call froze the UI for several seconds with no
-  // feedback (see PRODUCT_ROADMAP_NOTES.md's "model-loading silence" gap).
-  // Only the scan path actually needs it, but it's harmless to warm up
-  // either way in case a returning user scans again later.
-  preloadPoseLandmarker().catch(() => {}); // best-effort; real errors surface for real on the scan page itself
+  // Start downloading the pose model while the splash shows, so the first
+  // camera step doesn't freeze. Harmless if this person doesn't scan.
+  preloadPoseLandmarker().catch(() => {}); // errors show up on the scan page itself
 
   setTimeout(() => {
     if (returning) {
@@ -658,12 +596,8 @@ function goToSplash(name, returning) {
   }, 1500);
 }
 
-// Letters (any script)/numbers/spaces/hyphens/apostrophes only — this
-// name becomes a user_id threaded through several URLs
-// (encodeURIComponent + redirects + query-string round-trips). Rejecting
-// emoji/exotic symbols here up front is cheap insurance against a
-// malformed-surrogate edge case breaking encodeURIComponent somewhere
-// downstream, rather than debugging a cryptic browser error later.
+// Letters, numbers, spaces, hyphens and apostrophes only. The name ends up
+// in several URLs, and emoji can break encodeURIComponent.
 const SAFE_NAME_PATTERN = /^[\p{L}\p{N} '-]+$/u;
 
 nameContinueBtn.addEventListener("click", async () => {
@@ -688,8 +622,8 @@ nameContinueBtn.addEventListener("click", async () => {
     if (body.exists) {
       pendingNeedsRescan = Boolean(body.needs_rescan);
       isThisYouText.textContent = pendingNeedsRescan
-        ? `We found a profile named "${name}" — is this you? We've improved the scan since then, so we'll ask you to redo it (about a minute).`
-        : `We found a profile named "${name}" — is this you?`;
+        ? `We found a profile named "${name}". Is that you? We've improved the scan since then, so we'll ask you to redo it (takes about a minute).`
+        : `We found a profile named "${name}". Is that you?`;
       showScreen(screenIsThisYou);
     } else {
       goToSplash(name, false);
@@ -711,16 +645,13 @@ isThisYouNoBtn.addEventListener("click", () => {
   nameInput.focus();
 });
 
-// Zone 6: chat. Client-side label per machine slug — purely presentational
-// (friendly name to show on the tappable equipment strip / photo picker);
-// the actual machine-intent decision still happens server-side in
-// POST /assistant (see api.py's detect_machine_intent), tapping a chip or
-// a picker tile just sends its label as if the user had typed it.
+// Chat. Friendly names for the chips and the picker. Tapping one just sends
+// the name as a message, and the server works out which machine it is.
 const MACHINE_INFO = {
   chest_press: { label: "Chest Press" },
   shoulder_press: { label: "Shoulder Press" },
   lat_pulldown: { label: "Lat Pulldown" },
-  // pinHint: how the chosen number reads on the machine itself (field note 2026-09) — shown under the seat row.
+  // pinHint: how to read the pin number on the machine itself (from the gym visit).
   pec_deck: { label: "Pec Deck (Chest Fly)", pinHint: (pin) => `With the pin in, the number showing on the seat post should be ${pin}.` },
   seated_row: { label: "Seated Row" },
   leg_extension: { label: "Leg Extension" },
@@ -728,15 +659,9 @@ const MACHINE_INFO = {
   leg_press: { label: "Leg Press" },
 };
 
-// Real Matrix product photos (from Matrix's official site) for the 5
-// machines the live assistant actually supports — used by the full-screen
-// picker so someone who doesn't know a machine by name can recognise it.
-// Served from Supabase Storage (public "machine-photos" bucket, uploaded
-// via upload_machine_photos.py), not this repo — these are Matrix's own
-// photos, not ours to redistribute in a public GitHub repo, so they never
-// touch git; a missing/failed load here still falls back to an icon tile
-// (see renderPickerGrid's onerror). leg_press/leg_curl/leg_extension
-// deliberately have no entry (no photos exist yet).
+// Machine photos for the picker, hosted in Supabase Storage (they're
+// Matrix's photos, so they stay out of the repo). If one fails to load, the
+// tile shows an icon instead.
 const MACHINE_PHOTOS = {
   chest_press: "https://qeorztugpvicrjacwykd.supabase.co/storage/v1/object/public/machine-photos/chest_press.png",
   shoulder_press: "https://qeorztugpvicrjacwykd.supabase.co/storage/v1/object/public/machine-photos/shoulder_press.png",
@@ -745,19 +670,14 @@ const MACHINE_PHOTOS = {
   seated_row: "https://qeorztugpvicrjacwykd.supabase.co/storage/v1/object/public/machine-photos/seated_row.png",
 };
 
-// Matches api.py's _UNSUPPORTED_MACHINES — these chips/tiles still tap
-// through to a real (friendly "not available yet") bot reply, just
-// visually flagged up front so tapping one isn't a surprise dead-end.
+// Same list as api.py's _UNSUPPORTED_MACHINES. They still answer when
+// tapped, they just get a "Soon" badge.
 const UNSUPPORTED_SLUGS = new Set(["leg_press", "leg_curl", "leg_extension", "lat_pulldown", "seated_row"]);
 
 let currentUserId = null;
 
-// Chat history survives a refresh via localStorage — the backend has no
-// endpoint that reconstructs a conversation (POST /assistant is stateless
-// per-turn), so this is the one place the visible thread is ever stored.
-// Entries: {type:"text", role, text} or {type:"setup", facts, text}
-// (enough to replay via appendMessage/appendMachineSetupMessage below).
-// Capped so localStorage can't grow unbounded over a long session.
+// Chat history lives in localStorage so it survives a refresh. The server
+// doesn't keep transcripts. Capped so it can't grow forever.
 const CHAT_HISTORY_LIMIT = 60;
 
 function chatHistoryKey(userId) {
@@ -768,7 +688,7 @@ function loadChatHistory(userId) {
   try {
     return JSON.parse(localStorage.getItem(chatHistoryKey(userId)) || "[]");
   } catch (err) {
-    return []; // corrupt/foreign data — treat as no history rather than crash
+    return []; // bad data, start fresh
   }
 }
 
@@ -802,18 +722,14 @@ function renderEquipmentStrip(slugs) {
   }
 }
 
-// Full-screen photo picker's grid — built once alongside the strip (same
-// slug fetch, no separate round-trip) but only actually looked at once the
-// user opens the picker via #pickerOpenBtn.
+// Photo picker grid, built together with the chip strip.
 function renderPickerGrid(slugs) {
   pickerGrid.innerHTML = "";
   for (const slug of slugs) {
     const info = MACHINE_INFO[slug] || { label: slug };
     const photoUrl = MACHINE_PHOTOS[slug];
     const badge = UNSUPPORTED_SLUGS.has(slug) ? `<span class="picker-card-badge">Soon</span>` : "";
-    // onerror swaps to the same placeholder tile used when a machine has
-    // no MACHINE_PHOTOS entry at all — a deploy without machine_photos/
-    // populated (see .gitignore) shouldn't show a broken-image icon.
+    // No photo or a broken one: show the icon tile instead.
     const media = photoUrl
       ? `<img class="picker-card-photo" src="${photoUrl}" alt="${info.label}" loading="lazy" onerror="this.outerHTML='<div class=&quot;picker-card-photo-placeholder&quot;>🏋️</div>'" />`
       : `<div class="picker-card-photo-placeholder">🏋️</div>`;
@@ -832,12 +748,12 @@ function renderPickerGrid(slugs) {
 async function loadEquipmentStrip() {
   try {
     const res = await fetch(`${API_BASE}/machines`);
-    // Working machines first, "Soon" ones after — stable sort keeps API order within each group.
+    // Working machines first, then the "Soon" ones.
     const slugs = (await res.json()).sort((a, b) => UNSUPPORTED_SLUGS.has(a) - UNSUPPORTED_SLUGS.has(b));
     renderEquipmentStrip(slugs);
     renderPickerGrid(slugs);
   } catch (err) {
-    equipmentStrip.hidden = true; // fail quietly — typing still works without the strip/picker
+    equipmentStrip.hidden = true; // typing still works without the chips
   }
 }
 
@@ -859,20 +775,15 @@ function appendThinkingBubble() {
   return bubble;
 }
 
-// `label -> value` rows for the "Your Setup" block, built directly from the
-// API's `facts` array (see api.py's ExplanationFacts) — never from the
-// LLM's own retelling of a number, so what's shown here can never drift
-// from what the engine actually computed.
+// Rows for the "Your Setup" block come from the engine's facts, not the
+// model's wording.
 function humanizeAxisName(axisName) {
   return axisName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Only things the user can actually set (a pin) get a row, plus fixed
-// hardware that doesn't fit them at all — a fixed part that fits needs no
-// action, so it's left to the narration rather than shown as a bare number.
-// `notes` under a row: the neighbouring pin the scan can't rule out plus the
-// engine's physical check for choosing between them, and any machine-specific
-// hint for reading the number. A fixed part with a cue gets a note-only row.
+// Rows for things you can actually set (a pin), plus fixed parts that
+// don't fit you. Notes under a row: the other pin when it's a close call,
+// and how to read the number on the machine.
 function factsToSetupRows(facts, machine) {
   const pinHint = (MACHINE_INFO[machine] || {}).pinHint;
   const rows = [];
@@ -881,7 +792,7 @@ function factsToSetupRows(facts, machine) {
     const hasPin = f.achieved_pin !== null && f.achieved_pin !== undefined;
     const notes = [];
     if (hasPin && f.alternative_pin !== null && f.alternative_pin !== undefined) {
-      notes.push(f.user_cue || `Or pin ${f.alternative_pin} — try both and keep the one that feels aligned.`);
+      notes.push(f.user_cue || `Or pin ${f.alternative_pin}. Try both and keep whichever feels right.`);
     } else if (f.user_cue) {
       notes.push(f.user_cue);
     }
@@ -898,10 +809,8 @@ function factsToSetupRows(facts, machine) {
   return rows;
 }
 
-// Parses the narration's mandated WHY:/TIPS:/AVOID: three-line format (see
-// machines/narration_common.py's SYSTEM_PROMPT rule 9). Returns null if the
-// model didn't follow it — caller falls back to showing the raw text
-// rather than a broken/empty structured block.
+// Splits the WHY/TIPS/AVOID reply into parts. Returns null if the model
+// didn't use that format, and the raw text is shown instead.
 function parseNarration(text) {
   const why = text.match(/^WHY:\s*(.+)$/m);
   if (!why) return null;
@@ -917,10 +826,7 @@ function appendMachineSetupMessage(machine, facts, narrationText) {
 
   const header = document.createElement("div");
   header.className = "setup-header";
-  // MACHINE_INFO's friendly label (falls back to humanizing the slug for
-  // any machine not in that map) — was re-deriving from the bare slug
-  // before, which is why Pec Deck's card header couldn't show the
-  // "(Chest Fly)" qualifier that the equipment strip/picker already have.
+  // Friendly machine name, e.g. "Pec Deck (Chest Fly)".
   header.textContent = (MACHINE_INFO[machine] || { label: humanizeAxisName(machine) }).label;
   wrap.appendChild(header);
 
@@ -982,8 +888,7 @@ function appendMachineSetupMessage(machine, facts, narrationText) {
     addList("Technique tips", parsed.tips);
     addList("⚠️ Avoid", parsed.avoid);
   } else {
-    // Model didn't follow the WHY/TIPS/AVOID format — fall back to
-    // showing its raw reply rather than an empty-looking bubble.
+    // Reply wasn't in WHY/TIPS/AVOID format, so show it as is.
     const raw = document.createElement("p");
     raw.style.margin = "8px 0 0";
     raw.textContent = narrationText;
@@ -994,13 +899,8 @@ function appendMachineSetupMessage(machine, facts, narrationText) {
   chatThread.scrollTop = chatThread.scrollHeight;
 }
 
-// Thumbs up/down under a bot reply — POSTs to /feedback, best-effort (a
-// failed feedback send shouldn't interrupt the chat, so errors are
-// swallowed here unlike the rest of this file's deliberately-loud
-// error handling for actual chat failures). Not replayed on history
-// resume (see enterChat) — feedback is an in-the-moment action on a
-// reply that's still fresh on screen, not something to re-offer on an
-// old message after a refresh.
+// Thumbs up/down under a bot reply. Failures are ignored so feedback never
+// breaks the chat. Not shown again on old messages after a refresh.
 function attachFeedbackUI(machine) {
   const row = document.createElement("div");
   row.className = "feedback-row";
@@ -1024,7 +924,7 @@ function attachFeedbackUI(machine) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rating, machine, comment: comment || null }),
-    }).catch(() => {}); // best-effort — see comment above
+    }).catch(() => {}); // ignore failures, see above
   };
 
   const showThanks = (text) => {
@@ -1104,12 +1004,11 @@ async function sendMessage(text) {
     const body = await res.json();
     thinking.remove();
     if (!res.ok) {
-      // Not logged — a stale error bubble on resume would be more
-      // confusing than useful, and the point of leaving these loud (per
-      // project decision) is so the friend reports it live, not later.
+      // Errors aren't saved to history. They stay loud on purpose so
+      // testers report them right away.
       appendMessage("bot", `Something went wrong: ${body.detail || res.statusText}`);
     } else if (body.kind === "rescan") {
-      // Not logged/feedback-able — it's a routing prompt, not an answer.
+      // Not saved and no thumbs: it's a prompt, not an answer.
       appendMessage("bot", body.reply);
       appendRescanButton();
     } else if (body.kind === "machine_setup") {
@@ -1123,10 +1022,7 @@ async function sendMessage(text) {
     }
   } catch (err) {
     thinking.remove();
-    // err.name included deliberately (e.g. "TypeError" vs a network
-    // failure) — if this fires again, it pinpoints whether it's a bad
-    // URL/encoding issue or a real connectivity problem, instead of just
-    // the bare message.
+    // err.name helps tell a bad URL apart from a real network problem.
     appendMessage("bot", `Couldn't reach the server: ${err.name}: ${err.message}`);
   } finally {
     chatInput.disabled = false;
@@ -1140,10 +1036,7 @@ chatInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendMessage(chatInput.value);
 });
 
-// Only way back to the fake gym home screen once inside chat — the
-// chat/localStorage state itself is untouched (formfit_user_id stays put),
-// so re-entering FormFit later still recognizes the same person; this just
-// leaves the chat view without losing anything.
+// Back to the home screen. Nothing is lost, the chat is still there next time.
 chatBackBtn.addEventListener("click", () => showScreen(screenHome));
 
 function enterChat(userId, greeting) {
@@ -1154,9 +1047,7 @@ function enterChat(userId, greeting) {
 
   const history = loadChatHistory(userId);
   if (history.length > 0) {
-    // Resuming (refresh, or a returning visit) — replay what was actually
-    // said instead of restarting with a fresh greeting that would either
-    // repeat itself or clash with what's already in the thread.
+    // Coming back: replay the conversation instead of greeting again.
     replayChatHistory(history);
   } else {
     appendMessage("bot", greeting);
@@ -1167,9 +1058,8 @@ function enterChat(userId, greeting) {
   chatInput.focus();
 }
 
-// Both the "yes that's me" returning-user path above and scan.html's
-// post-scan handoff (Zone 3: ?user_id=...&from=scan) land straight in
-// chat. Checked once at page load, before anything else renders.
+// People coming from the scan (?from=scan) or confirming "that's me"
+// (?chat=1) go straight to the chat.
 (function handleArrivalParams() {
   const params = new URLSearchParams(window.location.search);
   const arrivingUserId = params.get("user_id");
@@ -1177,19 +1067,20 @@ function enterChat(userId, greeting) {
   const wantsChat = params.get("chat") === "1";
 
   if (arrivingUserId && (fromScan || wantsChat)) {
+    // The URL carries the lowercased id; greet with the name as typed when we have it.
+    const typedName = localStorage.getItem("formfit_display_name");
+    const shownName =
+      typedName && typedName.trim().toLowerCase() === arrivingUserId.trim().toLowerCase() ? typedName : arrivingUserId;
     const greeting = fromScan
-      ? `Thanks for scanning, ${arrivingUserId}! Tell me which machine you're at (or tap one below) and I'll get you set up.`
-      : `Welcome back, ${arrivingUserId}! Tell me which machine you're at (or tap one below) and I'll get you set up.`;
+      ? `Thanks for scanning, ${shownName}! Tell me which machine you're at (or tap one below) and I'll get you set up.`
+      : `Welcome back, ${shownName}! Tell me which machine you're at (or tap one below) and I'll get you set up.`;
     enterChat(arrivingUserId, greeting);
     return;
   }
 
   const savedUserId = localStorage.getItem("formfit_user_id");
   if (savedUserId) {
-    // A known user on this device — straight into chat, no "is this you?"
-    // re-confirmation and no re-typing a name. History replay in enterChat
-    // takes over from here; this fallback greeting only shows if that
-    // history is somehow empty.
+    // Known user on this device: straight into the chat.
     enterChat(savedUserId, "Welcome back!");
     return;
   }

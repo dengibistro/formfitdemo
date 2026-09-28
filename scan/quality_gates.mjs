@@ -332,7 +332,7 @@ export const QUALITY_MESSAGE = Object.freeze({
 });
 
 function occludedJointMessage(jointName) {
-  return `We can't get a clear view of your ${jointName} — your clothing may be too loose`;
+  return `Can't see your ${jointName} clearly. Your clothes might be too loose there`;
 }
 
 /**

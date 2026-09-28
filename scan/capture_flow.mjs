@@ -33,7 +33,7 @@ export const POSE_INSTRUCTIONS = Object.freeze({
     title: "Stand facing the camera",
     body: "Full body in frame, arms slightly away from your sides. Form-fitting clothing gives a more accurate result than loose clothing.",
     hint: "Arms slightly away from your sides",
-    why: "Measures your leg and arm lengths and shoulder width — used for leg-machine seats and pads, and to check the grip on the shoulder press.",
+    why: "Measures your leg and arm lengths and your shoulder width. We use these for seats and pads on leg machines, and to check the grip on the shoulder press.",
   },
   [POSE_KIND.SIDE_STANDING]: {
     title: "Turn side-on to the camera",
@@ -43,9 +43,9 @@ export const POSE_INSTRUCTIONS = Object.freeze({
   },
   [POSE_KIND.SIDE_SEATED]: {
     title: "Sit down side-on to the camera",
-    body: "Sit on a chair with your back straight. This sets up seat height on machines — it isn't a measure of squat depth.",
+    body: "Sit on a chair with your back straight. This one is for seat height on machines, not squat depth.",
     hint: "On a firm chair, back straight, feet flat",
-    why: "Measures how high your shoulders sit when you're seated — that's what sets the seat height on chest press, shoulder press and pec deck, so you're not sinking below the handles or reaching up to them.",
+    why: "Measures how high your shoulders are when you sit. That's what sets the seat height on chest press, shoulder press and pec deck, so you're not sinking below the handles or reaching up to them.",
   },
 });
 

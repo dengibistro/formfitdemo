@@ -3,14 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>FormFit — Body scan</title>
+<title>FormFit body scan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
-  /* Design tokens lifted from the user's earlier Lovable/Vercel prototype
-     (form-fit-roan.vercel.app) — real HSL values extracted from its
-     shipped CSS, not guessed/approximated. */
+  /* Design tokens, shared with frontend.html. */
   :root {
     color-scheme: light;
     --background: 0 0% 100%;
@@ -44,7 +42,7 @@
     border: 1px solid hsl(var(--border));
     box-shadow: 0 2px 12px -4px hsl(231 80% 30% / .12);
   }
-  /* Intro screen: pose overview, prep list, expandable "why" explainer. */
+  /* Intro screen: pose list, prep list, "why" explainer. */
   .section-label {
     font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
     color: hsl(var(--muted-foreground)); margin: 0 2px 8px;
@@ -126,7 +124,7 @@
   .measurement-unit { font-size: 13px; color: hsl(var(--muted-foreground)); margin-left: 6px; }
   [hidden] { display: none !important; }
 
-  /* Zone 3: completion celebration screen */
+  /* Completion screen */
   .celebrate-check {
     width: 72px; height: 72px; border-radius: 50%;
     background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)));
@@ -157,14 +155,13 @@
 <div class="app">
   <h1>FormFit body scan</h1>
 
-  <!-- Screen 1: privacy explanation + camera permission priming -->
+  <!-- Intro -->
   <section id="screenIntro" class="screen">
     <p>Three quick poses, about a minute. We turn them into your
     measurements so gym machines can be set up for your body.</p>
 
-    <!-- Pose list + "why" explainer are rendered from capture_flow.mjs's
-         POSE_INSTRUCTIONS (renderPoseOverview) — same copy source as the
-         capture screen, so the two can't drift apart. -->
+    <!-- Filled in by renderPoseOverview from capture_flow.mjs, the same
+         copy the capture screen uses. -->
     <div>
       <div class="section-label">What you'll do</div>
       <ol id="poseOverview" class="card pose-list"></ol>
@@ -180,12 +177,12 @@
         <div class="prep-item"><span class="icon">👕</span>
           <p>Fitted clothing and good light give the most accurate result</p></div>
         <div class="prep-item"><span class="icon">🔒</span>
-          <p>Your video never leaves your phone — only the numbers are sent</p></div>
+          <p>Your video never leaves your phone. Only the numbers are sent</p></div>
       </div>
     </div>
 
     <details class="why-details">
-      <summary>Why 3 poses — and what they're used for</summary>
+      <summary>Why 3 poses, and what they're for</summary>
       <div class="why-body">
         <div id="poseWhy" class="why-poses"></div>
         <div>
@@ -194,31 +191,31 @@
         </div>
         <div>
           <h3>Your privacy</h3>
-          <p>Everything is processed on your phone. The camera video is never
-          recorded or uploaded — only the final measurements are sent, and you
-          can check and edit them before saving.</p>
+          <p>Everything is processed on your phone. The video is never recorded
+          or uploaded. Only the final measurements are sent, and you can check
+          and edit them before saving.</p>
         </div>
       </div>
     </details>
 
     <label class="field">Your height (cm)
       <input id="heightCm" type="number" inputmode="numeric" placeholder="e.g. 178" min="120" max="230" />
-      <span class="field-help">Sets the scale for every measurement — be accurate.</span>
+      <span class="field-help">Everything else is scaled from this, so be accurate.</span>
     </label>
 
     <label class="field">Camera
       <select id="facingMode">
-        <option value="environment">Rear (recommended — more accurate)</option>
+        <option value="environment">Rear (more accurate)</option>
         <option value="user">Front</option>
       </select>
-      <span class="field-help">Rear works best with a friend or your phone propped up. Front lets you see the screen if you're scanning alone.</span>
+      <span class="field-help">Rear works best if a friend holds the phone or it's propped up. Front lets you see the screen if you're on your own.</span>
     </label>
 
     <button id="startBtn">Enable camera &amp; start scan</button>
     <div id="introError" class="status-banner" hidden></div>
   </section>
 
-  <!-- Screen 2: capture flow (Zones 1-4 wired together) -->
+  <!-- Capture -->
   <section id="screenCapture" class="screen" hidden>
     <div class="progress" id="flowProgress"></div>
     <div class="pose-title" id="flowTitle"></div>
@@ -246,31 +243,30 @@
     </div>
   </section>
 
-  <!-- Screen 3: confirmation/correction — computed automatically once all
-       three poses are in; every value is editable in case something looks
-       off. Confirm sends it to the FormFit API's POST /profiles (Zone 7). -->
+  <!-- Check measurements. Every value is editable before saving. -->
   <section id="screenDone" class="screen" hidden>
     <h1>Check your measurements</h1>
-    <p>Here's what we measured. If anything looks off, adjust it below
-    before confirming.</p>
+    <p>Here's what we measured. If anything looks off, fix it before saving.</p>
     <div id="measurementError" class="status-banner" hidden></div>
     <div id="measurementFields" class="card" style="display: flex; flex-direction: column; gap: 12px;"></div>
 
-    <label class="field"><span id="userIdLabelText">Your name (used as your profile ID)</span>
-      <input id="userIdInput" type="text" placeholder="e.g. yaroslav" />
-    </label>
-    <label class="field">API server address
-      <input id="apiBaseUrlInput" type="text" />
+    <label class="field"><span id="userIdLabelText">Your name</span>
+      <input id="userIdInput" type="text" placeholder="e.g. Jake" />
     </label>
 
-    <button id="confirmBtn">Confirm &amp; save measurements</button>
-    <div class="fallback-link"><button id="recomputeBtn" class="secondary" type="button">Recompute from captures</button></div>
+    <button id="confirmBtn">Save my measurements</button>
+
+    <!-- Dev tools, hidden unless the debug toggle is on. -->
+    <div class="debug-toggle"><button id="doneDebugToggleBtn" type="button">debug</button></div>
+    <div id="doneDebugPanel" hidden>
+      <label class="field">API server address
+        <input id="apiBaseUrlInput" type="text" />
+      </label>
+      <div class="fallback-link"><button id="recomputeBtn" class="secondary" type="button">Recompute from captures</button></div>
+    </div>
   </section>
 
-  <!-- Screen 4: completion celebration — shown right after a successful
-       save, then auto-redirects into the chat product (Phase 2). Not a
-       dead end: closes the gap the earlier "raw JSON and nothing else"
-       placeholder left. -->
+  <!-- Done. Redirects into the chat after a moment. -->
   <section id="screenCelebrate" class="screen" hidden>
     <div class="celebrate-check">&#10003;</div>
     <h1>You're all set</h1>
@@ -293,8 +289,7 @@ const introError = document.getElementById("introError");
 const heightCmInput = document.getElementById("heightCm");
 const startBtn = document.getElementById("startBtn");
 
-// Stick-figure pictograms for the intro pose list — decorative (aria-hidden),
-// stroke follows the icon tile's colour.
+// Stick-figure icons for the intro pose list. Decorative only.
 const POSE_ICONS = {
   [POSE_KIND.FRONT]:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v7M12 8.5l-4.5 4M12 8.5l4.5 4M12 14l-2.5 7M12 14l2.5 7"/></svg>',
@@ -304,8 +299,7 @@ const POSE_ICONS = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><path d="M9 6.5V13h6v7h2M9 8l3 3.5M5.5 8v13M5.5 15.5h8M13.5 15.5V21"/></svg>',
 };
 
-/** Intro screen: the numbered pose list ("what you'll do") and the per-pose
- * part of the "why 3 poses" explainer, both from POSE_INSTRUCTIONS. */
+// Intro screen: the pose list and the per-pose part of the "why" explainer.
 function renderPoseOverview() {
   const list = document.getElementById("poseOverview");
   const why = document.getElementById("poseWhy");
@@ -356,17 +350,16 @@ const apiBaseUrlInput = document.getElementById("apiBaseUrlInput");
 const screenCelebrate = document.getElementById("screenCelebrate");
 const celebrateStats = document.getElementById("celebrateStats");
 
-// api.py now serves this very page (mounted at /scan — see api.py's
-// StaticFiles mount), so same-origin is the right default whether we're
-// reached via localhost or an ngrok tunnel. Still editable in case this
-// file is ever served from somewhere else (e.g. a plain static server).
+// The API serves this page, so the same origin is the right default.
+// Editable in the debug panel for testing against another server.
 apiBaseUrlInput.value = window.location.origin;
+const doneDebugPanel = document.getElementById("doneDebugPanel");
+document.getElementById("doneDebugToggleBtn").addEventListener("click", () => {
+  doneDebugPanel.hidden = !doneDebugPanel.hidden;
+});
 
-// Phase 2: when the future frontend.html FormFit entry flow (Zone 5) hands
-// off to this page, it passes the already-decided name via ?user_id= —
-// this page no longer needs to ask a second time. Falls back to the
-// original manual-entry field when opened directly (e.g. our own testing
-// via test_harness.html-style workflows, or scan.html on its own).
+// Coming from the app, the name arrives as ?user_id=, so we don't ask again.
+// Opened on its own, the name field is filled in by hand.
 const handoffUserId = new URLSearchParams(window.location.search).get("user_id");
 if (handoffUserId) {
   userIdInput.value = handoffUserId;
@@ -374,10 +367,7 @@ if (handoffUserId) {
   userIdLabelText.textContent = `Continuing as ${handoffUserId}`;
 }
 
-// Debug panel (raw ratios/visibility/framing numbers, redo picker) stays
-// hidden by default for real users — same diagnostics that made the real-
-// device rotation/framing bugs tractable during Zones 1-4, kept around for
-// us, not for the product. Toggled, never shown by default.
+// Debug panel (raw numbers, redo picker). Hidden unless toggled.
 debugToggleBtn.addEventListener("click", () => debugPanel.classList.toggle("open"));
 
 let flow = createCaptureFlow();
@@ -406,16 +396,13 @@ function renderFlow() {
 }
 renderFlow();
 
-const RECENT_FRAMES_WINDOW = 15; // ~0.5-1s at typical webcam framerates — jitter/stability check only
+const RECENT_FRAMES_WINDOW = 15; // about 0.5 to 1 s of frames, used for the stability check
 let recentLandmarkFrames = [];
 let recentWorldFrames = [];
 let latestDetection = null;
 let cameraStream = null;
 
-// Longer-lived accumulation for the actual capture average: every frame
-// collected during the entire ready streak (the full COUNTDOWN_MS hold),
-// not just the short jitter window above. See PRODUCT_ROADMAP_NOTES.md's
-// "Averaging window widened" section.
+// Every frame from the full countdown hold, averaged into the capture.
 let heldLandmarkFrames = [];
 let heldWorldFrames = [];
 
@@ -479,9 +466,7 @@ function performCapture(poseKind, detection, framesWindow, worldFramesWindow) {
   showDoneScreenIfComplete();
 }
 
-// Height is the scan's only scale anchor (computeCalibrationFactor), so it's
-// required and sanity-checked up front — the field used to be pre-filled
-// with 178, which silently scaled anyone who didn't change it.
+// Height is what every other measurement is scaled from, so it's required.
 const HEIGHT_CM_MIN = 120;
 const HEIGHT_CM_MAX = 230;
 
@@ -490,22 +475,17 @@ startBtn.addEventListener("click", async () => {
   const heightCm = Number(heightCmInput.value);
   if (heightCmInput.value.trim() === "" || !(heightCm >= HEIGHT_CM_MIN && heightCm <= HEIGHT_CM_MAX)) {
     introError.hidden = false;
-    introError.textContent = `Enter your height in cm (between ${HEIGHT_CM_MIN} and ${HEIGHT_CM_MAX}) — it sets the scale for every measurement.`;
+    introError.textContent = `Enter your height in cm (${HEIGHT_CM_MIN} to ${HEIGHT_CM_MAX}). Everything else is scaled from it.`;
     heightCmInput.focus();
     return;
   }
   startBtn.disabled = true;
   startBtn.textContent = "Requesting camera…";
   try {
-    // Must be created/resumed from a user gesture (this click) — browsers
-    // block audio otherwise, and the countdown beeps fire later from
-    // inside the detection loop, which isn't itself a user gesture.
+    // Audio has to start from a tap, or browsers block the countdown beeps.
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") await audioCtx.resume();
 
-    // Rear camera is pre-selected as the recommended default (more
-    // accurate framing for a full-body shot), but the user can pick front
-    // instead on the intro screen — no hidden adaptive fallback prompt.
     const facingMode = document.getElementById("facingMode").value;
     cameraStream = await startCamera(video, facingMode);
     overlay.width = video.videoWidth || 1280;
@@ -524,9 +504,7 @@ startBtn.addEventListener("click", async () => {
 });
 
 function drawSkeleton(landmarks) {
-  // Hidden by default in the product UI (canvas stays but is never drawn
-  // to unless the debug panel is open) — real users don't need to see
-  // the raw landmark skeleton, just the friendly status banner.
+  // Only drawn while the debug panel is open.
   if (!debugPanel.classList.contains("open")) {
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     return;
@@ -560,7 +538,7 @@ async function loop(timestampMs) {
   const detection = await detectPoseInVideoFrame(video, timestampMs);
 
   if (!detection) {
-    setStatus("We can't see you — step into frame", false);
+    setStatus("Can't see you. Step into the frame", false);
     latestDetection = null;
   } else {
     latestDetection = detection;
@@ -632,7 +610,7 @@ captureBtn.addEventListener("click", () => {
   const poseKind = currentPoseKind(flow);
   if (!poseKind) return;
   if (!latestDetection || recentLandmarkFrames.length < RECENT_FRAMES_WINDOW) {
-    captureLog.textContent = "Not enough stable frames yet — wait a moment.";
+    captureLog.textContent = "Not enough stable frames yet. Wait a moment.";
     return;
   }
   performCapture(poseKind, latestDetection, recentLandmarkFrames.slice(), recentWorldFrames.slice());
@@ -646,16 +624,14 @@ redoBtn.addEventListener("click", () => {
   readySinceMs = null;
   heldLandmarkFrames = [];
   heldWorldFrames = [];
-  captureLog.textContent = `Redo — ${poseKind} can be captured again.`;
+  captureLog.textContent = `Redo: ${poseKind} can be captured again.`;
   renderFlow();
   screenDone.hidden = true;
   screenCapture.hidden = false;
 });
 
-// Zone 6: confirmation/correction. Friendly label + note (if any) per raw
-// measurement key — note is only used for Cd, the one measurement this
-// project's own docs flag as inherently lower-confidence (mask-width
-// technique, not a clean joint-to-joint distance like the rest).
+// Confirmation screen rows. Chest depth gets a note because it's the least
+// precise measurement.
 const MEASUREMENT_FIELDS = [
   { key: "femur_L_mm", label: "Left thigh" },
   { key: "femur_R_mm", label: "Right thigh" },
@@ -665,12 +641,11 @@ const MEASUREMENT_FIELDS = [
   { key: "arm_R_mm", label: "Right arm" },
   { key: "biacromial_width_mm", label: "Shoulder width" },
   { key: "sitting_height_T_mm", label: "Sitting height (seat to top of head)" },
-  { key: "chest_depth_Cd_mm", label: "Chest depth", note: "Lower-confidence estimate — worth double-checking" },
+  { key: "chest_depth_Cd_mm", label: "Chest depth", note: "Rough estimate, worth a double check" },
 ];
 
 let measurementInputs = {};
-// This scan's own σ per segment (computeScanSigmaMm), sent alongside the
-// measurements so the engine's confidence reflects this scan's quality.
+// How precise each measurement was on this scan, sent with the profile.
 let scanSigma = null;
 
 function computeMeasurements() {
@@ -755,12 +730,8 @@ function todayIsoDate() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Maps this screen's flat MEASUREMENT_FIELDS keys onto api.py's ProfileIn
-// wire shape (models.py's AnthropometryProfile via a lax DTO — see
-// api.py's docstring on ProfileIn for why the nested per-side segments and
-// ISO date string are shaped this way). single_sided is always false here:
-// the scan pipeline always captures both left and right, it never falls
-// back to a single symmetrised value.
+// Shapes the measurements the way POST /profiles expects. Both sides are
+// always captured, so single_sided is always false.
 function buildProfilePayload() {
   const mm = {};
   for (const field of MEASUREMENT_FIELDS) {
@@ -780,9 +751,7 @@ function buildProfilePayload() {
   };
 }
 
-// Zone 3: completion celebration + handoff into the chat product (Phase 2)
-// instead of dead-ending on a raw JSON dump. `profile` is the server's own
-// echoed-back AnthropometryProfile (already normalized user_id, etc.).
+// Completion screen. `profile` is what the server saved.
 function buildCelebrateStats(profile) {
   const cm = (mm) => (mm / 10).toFixed(1);
   const avgCm = (segment) => cm((segment.left_mm + segment.right_mm) / 2);
@@ -816,11 +785,7 @@ function runCelebrationAndRedirect(profile) {
   screenDone.hidden = true;
   screenCelebrate.hidden = false;
 
-  // Phase 2's chat product (frontend.html, Zones 4-6) isn't built yet, so
-  // this redirect 404s for now — the URL contract (?user_id=...&from=scan)
-  // is deliberately fixed now so frontend.html's FormFit entry step
-  // (Zone 5) can read it later and skip straight to chat instead of
-  // re-running the whole onboarding for someone who just finished it here.
+  // Straight into the chat; from=scan picks the right greeting there.
   const redirectUrl = `${window.location.origin}/?user_id=${encodeURIComponent(profile.user_id)}&from=scan`;
   const revealMs = 150 * stats.length + 900;
   setTimeout(() => {
@@ -832,7 +797,7 @@ confirmBtn.addEventListener("click", async () => {
   measurementError.hidden = true;
   if (!userIdInput.value.trim()) {
     measurementError.hidden = false;
-    measurementError.textContent = "Enter your name first — it's used as your profile ID.";
+    measurementError.textContent = "Enter your name first.";
     return;
   }
 
@@ -854,11 +819,11 @@ confirmBtn.addEventListener("click", async () => {
     runCelebrationAndRedirect(body);
   } catch (err) {
     measurementError.hidden = false;
-    measurementError.textContent = `Couldn't save: ${err.message}. Check the API server address and that it's running.`;
+    measurementError.textContent = `Couldn't save your measurements (${err.message}). Check your connection and try again.`;
     measurementError.scrollIntoView({ behavior: "smooth", block: "center" });
   } finally {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = "Confirm & save measurements";
+    confirmBtn.textContent = "Save my measurements";
   }
 });
 </script>
