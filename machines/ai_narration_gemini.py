@@ -49,7 +49,12 @@ from machines.narration_common import SYSTEM_PROMPT, setup_context_message, stri
 # preview recommends the GA models instead (gemini-3.5-flash, or
 # gemini-3.1-flash-lite for cheaper; gemini-3.8-flash is the newest GA Flash
 # as of 2026-09). Defaulting to a GA model, not a preview.
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+#
+# REVISED again same day: now gemini-3.1-flash-lite. The user's key has no
+# billing, and 3.1 Flash-Lite is the one current model third-party guides
+# consistently list on the free tier (3.5 Flash isn't confirmed there). It's
+# also the fastest, which suits rephrasing short replies.
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 # Older history, 2026-07-09: "gemini-2.5-flash" was retired from the Interactions
 # API specifically (still listed by client.models.list(), but
 # interactions.create() rejected it with "no longer available"). Verified
@@ -85,11 +90,13 @@ _GENERATION_CONFIG = {
     "max_output_tokens": 800,  # replies are a few sentences
 }
 
-# The SDK retries failed calls by default (3 times, backing off up to a
-# minute), which turned rate-limit or overload errors into a silent 20s
-# timeout: the real error never surfaced. One quick retry keeps a blip from
-# failing the call and leaves room for the actual error to come back.
-_RETRY_OPTIONS = types.HttpRetryOptions(attempts=1, initial_delay=1.0, max_delay=2.0)
+# No SDK retries at all. On a 429 (quota or free-tier limit) Google sends a
+# Retry-After, and the SDK sleeps for exactly that long, ignoring max_delay
+# (see google/genai/_gaos/utils/retries.py, _get_sleep_interval). So a quota
+# error turned into our 20s "timeout" and the real cause never showed.
+# Without retries a 429 comes straight back as "error: 429". _call_gemini
+# still does its own single retry without the conversation pointer.
+_RETRY_OPTIONS = types.HttpRetryOptions(attempts=0)
 
 # Errors go to stderr, which Render shows under the service's Logs tab.
 log = logging.getLogger("formfit.gemini")
