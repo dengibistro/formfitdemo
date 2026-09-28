@@ -255,6 +255,7 @@
     </label>
 
     <button id="confirmBtn">Save my measurements</button>
+    <div class="fallback-link"><button id="retakeScanBtn" class="secondary" type="button">Retake scan</button></div>
 
     <!-- Dev tools, hidden unless the debug toggle is on. -->
     <div class="debug-toggle"><button id="doneDebugToggleBtn" type="button">debug</button></div>
@@ -341,6 +342,7 @@ const flowBodyEl = document.getElementById("flowBody");
 const debugToggleBtn = document.getElementById("debugToggleBtn");
 const debugPanel = document.getElementById("debugPanel");
 const confirmBtn = document.getElementById("confirmBtn");
+const retakeScanBtn = document.getElementById("retakeScanBtn");
 const recomputeBtn = document.getElementById("recomputeBtn");
 const measurementFields = document.getElementById("measurementFields");
 const measurementError = document.getElementById("measurementError");
@@ -630,6 +632,28 @@ redoBtn.addEventListener("click", () => {
   screenCapture.hidden = false;
 });
 
+// Redoes all three poses, not just one, without leaving this page (the
+// camera stays on the whole time, so nothing needs restarting). The
+// detection loop keeps running once the flow is complete, so resetting
+// `flow` here is enough for it to pick the front pose back up.
+retakeScanBtn.addEventListener("click", () => {
+  captures.front = null;
+  captures.side_standing = null;
+  captures.side_seated = null;
+  flow = createCaptureFlow();
+  recentLandmarkFrames = [];
+  recentWorldFrames = [];
+  heldLandmarkFrames = [];
+  heldWorldFrames = [];
+  readySinceMs = null;
+  lastReadyMs = null;
+  lastCountdownBeepSecond = null;
+  captureLog.textContent = "";
+  renderFlow();
+  screenDone.hidden = true;
+  screenCapture.hidden = false;
+});
+
 // Confirmation screen rows. Chest depth gets a note because it's the least
 // precise measurement.
 const MEASUREMENT_FIELDS = [
@@ -637,9 +661,13 @@ const MEASUREMENT_FIELDS = [
   { key: "femur_R_mm", label: "Right thigh" },
   { key: "tibia_L_mm", label: "Left shin" },
   { key: "tibia_R_mm", label: "Right shin" },
-  { key: "arm_L_mm", label: "Left arm" },
-  { key: "arm_R_mm", label: "Right arm" },
-  { key: "biacromial_width_mm", label: "Shoulder width" },
+  { key: "arm_L_mm", label: "Left arm", note: "Shoulder joint to wrist, via the elbow, not a straight line" },
+  { key: "arm_R_mm", label: "Right arm", note: "Shoulder joint to wrist, via the elbow, not a straight line" },
+  {
+    key: "biacromial_width_mm",
+    label: "Shoulder width",
+    note: "Joint to joint, narrower than a tape measure around the outside of your shoulders",
+  },
   { key: "sitting_height_T_mm", label: "Sitting height (seat to top of head)" },
   { key: "chest_depth_Cd_mm", label: "Chest depth", note: "Rough estimate, worth a double check" },
 ];
