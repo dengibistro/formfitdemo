@@ -21,18 +21,31 @@ export const CAPTURE_SEQUENCE = Object.freeze([POSE_KIND.FRONT, POSE_KIND.SIDE_S
 // named/singled out, and the seated pose gets its own honest explanation
 // tied to what it actually computes (seat height on press machines), not
 // something invented like squat depth.
+//
+// `title`/`body` are shown on the capture screen during the pose; `hint`
+// (one short line) and `why` (what it measures -> what it sets) are shown
+// on the intro screen before the scan starts, so people know what's coming
+// (scan.html's renderPoseOverview). Kept together so the two screens can't
+// drift apart. `why` for the side-standing pose says "helps fit", not
+// "sets": the engine doesn't consume torso depth yet.
 export const POSE_INSTRUCTIONS = Object.freeze({
   [POSE_KIND.FRONT]: {
     title: "Stand facing the camera",
     body: "Full body in frame, arms slightly away from your sides. Form-fitting clothing gives a more accurate result than loose clothing.",
+    hint: "Arms slightly away from your sides",
+    why: "Measures your leg and arm lengths and shoulder width — used for leg-machine seats and pads, and to check the grip on the shoulder press.",
   },
   [POSE_KIND.SIDE_STANDING]: {
     title: "Turn side-on to the camera",
     body: "Full body in frame, arms relaxed at your sides. This pose measures the depth of your torso.",
+    hint: "Arms relaxed at your sides",
+    why: "Captures your torso profile, which helps fit chest-supported machines.",
   },
   [POSE_KIND.SIDE_SEATED]: {
     title: "Sit down side-on to the camera",
     body: "Sit on a chair with your back straight. This sets up seat height on machines — it isn't a measure of squat depth.",
+    hint: "On a firm chair, back straight, feet flat",
+    why: "Measures how high your shoulders sit when you're seated — that's what sets the seat height on chest press, shoulder press and pec deck, so you're not sinking below the handles or reaching up to them.",
   },
 });
 
@@ -151,6 +164,15 @@ if (typeof process !== "undefined" && process.versions && process.versions.node)
     const unknownRedo = requestRedo(flow, "not_a_real_pose");
     assertEqual(unknownRedo, flow, "redo with unknown pose kind is a no-op");
     console.log("redo: OK");
+
+    // --- Every pose has all four pieces of copy (intro screen + capture screen) ---
+    for (const poseKind of CAPTURE_SEQUENCE) {
+      for (const key of ["title", "body", "hint", "why"]) {
+        const text = POSE_INSTRUCTIONS[poseKind][key];
+        assertEqual(typeof text === "string" && text.length > 0, true, `${poseKind}.${key} present`);
+      }
+    }
+    console.log("pose copy complete: OK");
 
     console.log("\nAll scan/capture_flow.mjs smoke tests passed.");
   }

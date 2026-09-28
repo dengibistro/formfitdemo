@@ -44,9 +44,39 @@
     border: 1px solid hsl(var(--border));
     box-shadow: 0 2px 12px -4px hsl(231 80% 30% / .12);
   }
-  .privacy-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
-  .privacy-item { display: flex; gap: 10px; align-items: flex-start; }
-  .privacy-item .icon { font-size: 18px; line-height: 1.4; }
+  /* Intro screen: pose overview, prep list, expandable "why" explainer. */
+  .section-label {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: hsl(var(--muted-foreground)); margin: 0 2px 8px;
+  }
+  .pose-list { list-style: none; margin: 0; padding: 4px 16px; display: flex; flex-direction: column; }
+  .pose-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+  .pose-item + .pose-item { border-top: 1px solid hsl(var(--border)); }
+  .pose-icon {
+    width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: white;
+    color: hsl(var(--primary-dark)); display: flex; align-items: center; justify-content: center;
+  }
+  .pose-icon svg { width: 28px; height: 28px; }
+  .pose-text { min-width: 0; }
+  .pose-name { font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); }
+  .pose-hint { font-size: 13px; color: hsl(var(--muted-foreground)); margin-top: 1px; }
+  .prep-list { display: flex; flex-direction: column; gap: 10px; }
+  .prep-item { display: flex; gap: 10px; align-items: flex-start; }
+  .prep-item .icon { font-size: 16px; line-height: 1.4; flex-shrink: 0; }
+  .prep-item p { font-size: 14px; }
+  .why-details { border: 1px solid hsl(var(--border)); border-radius: var(--radius); padding: 0 16px; }
+  .why-details summary {
+    cursor: pointer; list-style: none; padding: 14px 0; font-size: 14px; font-weight: 600;
+    color: hsl(var(--primary-dark)); display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .why-details summary::-webkit-details-marker { display: none; }
+  .why-details summary::after { content: "+"; font-size: 20px; font-weight: 500; line-height: 1; }
+  .why-details[open] summary::after { content: "\2013"; }
+  .why-body { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; }
+  .why-poses { display: flex; flex-direction: column; gap: 12px; }
+  .why-body h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); }
+  .why-body p { font-size: 14px; }
+  .field-help { font-size: 12px; font-weight: 400; color: hsl(var(--muted-foreground)); }
   label.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: hsl(var(--foreground)); font-weight: 500; }
   input[type="number"], input[type="text"], select {
     background: hsl(0 0% 100%); border: 1px solid hsl(var(--border)); color: hsl(var(--foreground));
@@ -129,22 +159,51 @@
 
   <!-- Screen 1: privacy explanation + camera permission priming -->
   <section id="screenIntro" class="screen">
-    <p>We'll take you through three quick poses to work out your body's
-    measurements, so we can set up gym machines to fit you exactly.</p>
+    <p>Three quick poses, about a minute. We turn them into your
+    measurements so gym machines can be set up for your body.</p>
 
-    <div class="card privacy-list">
-      <div class="privacy-item"><span class="icon">🔒</span>
-        <p>Everything happens on your own device. Your camera feed is never
-        recorded or uploaded — only the final measurements are sent.</p></div>
-      <div class="privacy-item"><span class="icon">📏</span>
-        <p>Form-fitting clothing gives a more accurate result than loose
-        clothing.</p></div>
-      <div class="privacy-item"><span class="icon">📶</span>
-        <p>You'll need to grant camera access on the next step.</p></div>
+    <!-- Pose list + "why" explainer are rendered from capture_flow.mjs's
+         POSE_INSTRUCTIONS (renderPoseOverview) — same copy source as the
+         capture screen, so the two can't drift apart. -->
+    <div>
+      <div class="section-label">What you'll do</div>
+      <ol id="poseOverview" class="card pose-list"></ol>
     </div>
 
+    <div>
+      <div class="section-label">Before you start</div>
+      <div class="card prep-list">
+        <div class="prep-item"><span class="icon">📱</span>
+          <p>Prop your phone up 2–3 m away, or ask a friend to hold it</p></div>
+        <div class="prep-item"><span class="icon">🪑</span>
+          <p>Have a firm chair nearby for the last pose</p></div>
+        <div class="prep-item"><span class="icon">👕</span>
+          <p>Fitted clothing and good light give the most accurate result</p></div>
+        <div class="prep-item"><span class="icon">🔒</span>
+          <p>Your video never leaves your phone — only the numbers are sent</p></div>
+      </div>
+    </div>
+
+    <details class="why-details">
+      <summary>Why 3 poses — and what they're used for</summary>
+      <div class="why-body">
+        <div id="poseWhy" class="why-poses"></div>
+        <div>
+          <h3>Your height</h3>
+          <p>It sets the scale for every other measurement, so enter it accurately.</p>
+        </div>
+        <div>
+          <h3>Your privacy</h3>
+          <p>Everything is processed on your phone. The camera video is never
+          recorded or uploaded — only the final measurements are sent, and you
+          can check and edit them before saving.</p>
+        </div>
+      </div>
+    </details>
+
     <label class="field">Your height (cm)
-      <input id="heightCm" type="number" value="178" min="100" max="230" />
+      <input id="heightCm" type="number" inputmode="numeric" placeholder="e.g. 178" min="120" max="230" />
+      <span class="field-help">Sets the scale for every measurement — be accurate.</span>
     </label>
 
     <label class="field">Camera
@@ -152,6 +211,7 @@
         <option value="environment">Rear (recommended — more accurate)</option>
         <option value="user">Front</option>
       </select>
+      <span class="field-help">Rear works best with a friend or your phone propped up. Front lets you see the screen if you're scanning alone.</span>
     </label>
 
     <button id="startBtn">Enable camera &amp; start scan</button>
@@ -221,9 +281,9 @@
 
 <script type="module">
 import { POSE_LANDMARK, computeCalibrationFactor, computeFrontMeasurementsMm, computeSittingHeightMm, computeChestDepthMm, computeScanSigmaMm } from "./measurements.mjs";
-import { evaluateCaptureQuality, averageLandmarksOverWindow, estimateFacingRotationRatio, estimateProfileVisibilityAsymmetry, estimateFramingIssue } from "./quality_gates.mjs";
+import { POSE_KIND, evaluateCaptureQuality, averageLandmarksOverWindow, estimateFacingRotationRatio, estimateProfileVisibilityAsymmetry, estimateFramingIssue } from "./quality_gates.mjs";
 import { detectPoseInVideoFrame, maskToPlainData, estimateAverageLuminance, startCamera, stopCamera } from "./mediapipe_runner.mjs";
-import { createCaptureFlow, currentPoseKind, isFlowComplete, progressText, currentInstructions, advanceAfterCapture, requestRedo } from "./capture_flow.mjs";
+import { CAPTURE_SEQUENCE, POSE_INSTRUCTIONS, createCaptureFlow, currentPoseKind, isFlowComplete, progressText, currentInstructions, advanceAfterCapture, requestRedo } from "./capture_flow.mjs";
 import { PoseLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs";
 
 const screenIntro = document.getElementById("screenIntro");
@@ -232,6 +292,45 @@ const screenDone = document.getElementById("screenDone");
 const introError = document.getElementById("introError");
 const heightCmInput = document.getElementById("heightCm");
 const startBtn = document.getElementById("startBtn");
+
+// Stick-figure pictograms for the intro pose list — decorative (aria-hidden),
+// stroke follows the icon tile's colour.
+const POSE_ICONS = {
+  [POSE_KIND.FRONT]:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v7M12 8.5l-4.5 4M12 8.5l4.5 4M12 14l-2.5 7M12 14l2.5 7"/></svg>',
+  [POSE_KIND.SIDE_STANDING]:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v7M12 8.5l.8 5M12 14v7h2"/></svg>',
+  [POSE_KIND.SIDE_SEATED]:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><path d="M9 6.5V13h6v7h2M9 8l3 3.5M5.5 8v13M5.5 15.5h8M13.5 15.5V21"/></svg>',
+};
+
+/** Intro screen: the numbered pose list ("what you'll do") and the per-pose
+ * part of the "why 3 poses" explainer, both from POSE_INSTRUCTIONS. */
+function renderPoseOverview() {
+  const list = document.getElementById("poseOverview");
+  const why = document.getElementById("poseWhy");
+  CAPTURE_SEQUENCE.forEach((poseKind, i) => {
+    const copy = POSE_INSTRUCTIONS[poseKind];
+    const title = `${i + 1}. ${copy.title}`;
+
+    const item = document.createElement("li");
+    item.className = "pose-item";
+    item.innerHTML = `<span class="pose-icon" aria-hidden="true">${POSE_ICONS[poseKind]}</span>
+      <div class="pose-text"><div class="pose-name"></div><div class="pose-hint"></div></div>`;
+    item.querySelector(".pose-name").textContent = title;
+    item.querySelector(".pose-hint").textContent = copy.hint;
+    list.appendChild(item);
+
+    const block = document.createElement("div");
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    const body = document.createElement("p");
+    body.textContent = copy.why;
+    block.append(heading, body);
+    why.appendChild(block);
+  });
+}
+renderPoseOverview();
 
 const video = document.getElementById("video");
 const overlay = document.getElementById("overlay");
@@ -380,8 +479,21 @@ function performCapture(poseKind, detection, framesWindow, worldFramesWindow) {
   showDoneScreenIfComplete();
 }
 
+// Height is the scan's only scale anchor (computeCalibrationFactor), so it's
+// required and sanity-checked up front — the field used to be pre-filled
+// with 178, which silently scaled anyone who didn't change it.
+const HEIGHT_CM_MIN = 120;
+const HEIGHT_CM_MAX = 230;
+
 startBtn.addEventListener("click", async () => {
   introError.hidden = true;
+  const heightCm = Number(heightCmInput.value);
+  if (heightCmInput.value.trim() === "" || !(heightCm >= HEIGHT_CM_MIN && heightCm <= HEIGHT_CM_MAX)) {
+    introError.hidden = false;
+    introError.textContent = `Enter your height in cm (between ${HEIGHT_CM_MIN} and ${HEIGHT_CM_MAX}) — it sets the scale for every measurement.`;
+    heightCmInput.focus();
+    return;
+  }
   startBtn.disabled = true;
   startBtn.textContent = "Requesting camera…";
   try {
