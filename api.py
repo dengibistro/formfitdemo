@@ -311,22 +311,22 @@ _MACHINE_RESOLVERS = {
 _SLUG_BY_MACHINE_NAME = {machine_enum.value: slug for slug, (machine_enum, _) in _MACHINE_RESOLVERS.items()}
 
 
-def _narrate(user_id: str, machine: str, facts: list[ExplanationFacts]) -> tuple[str, bool]:
-    """(reply, ai_fallback) for a setup, with the approved tips/avoids for
+def _narrate(user_id: str, machine: str, facts: list[ExplanationFacts]) -> tuple[str, str | None]:
+    """(reply, ai_error) for a setup, with the approved tips/avoids for
     this machine and result (machines/coaching.py). The model only rephrases
     them; enforce_coaching puts the approved text back if it doesn't.
 
     If Gemini is down, the setup still goes out: the engine's pins and the
-    library tips don't need the model, only the wording does. ai_fallback
-    tells the chat to say so."""
+    library tips don't need the model, only the wording does. ai_error (None
+    when the model answered) tells the chat to say so, and why."""
     coaching = select_coaching(machine, facts) if machine in COACHING else None
     try:
         narration = narrate_setup(
             user_id, facts, just_finished_machine=storage.get_last_machine(user_id), coaching=coaching
         )
-    except GeminiUnavailableError:
-        return fallback_narration(facts, coaching), True
-    return (enforce_coaching(narration, coaching) if coaching else narration), False
+    except GeminiUnavailableError as e:
+        return fallback_narration(facts, coaching), e.code
+    return (enforce_coaching(narration, coaching) if coaching else narration), None
 
 
 def _chat(user_id: str, message: str) -> str:
@@ -337,7 +337,11 @@ def _chat(user_id: str, message: str) -> str:
     try:
         return gemini_chat(user_id, chat_message_with_notes(message, notes, last_machine))
     except GeminiUnavailableError as e:
-        raise HTTPException(503, str(e)) from e
+        # A 503 with a JSON `detail`, which the chat shows as "Something went
+        # wrong: ...", instead of an unhandled 500 it can't parse.
+        raise HTTPException(
+            503, f"{e} Try again in a minute. Machine setups still work, just tap a machine. (error: {e.code})"
+        ) from e
 
 
 @app.post("/profiles")
@@ -445,6 +449,7 @@ class AssistantReply(BaseModel):
     # True when Gemini was down and this setup was built from the engine and
     # the tip library alone; the chat shows a note so it's obvious.
     ai_fallback: bool = False
+    ai_error: str | None = None  # short code for why ("timeout", "429"), shown in that note
 
 
 
@@ -514,11 +519,16 @@ def assistant_message(user_id: str, body: AssistantMessage) -> AssistantReply:
         injuries = storage.get_injuries(user_id)
         resolution = resolver(profile, injuries, None)
         facts = _extract_facts(resolution, machine_enum.value)
-        narration, ai_fallback = _narrate(user_id, machine, facts)
+        narration, ai_error = _narrate(user_id, machine, facts)
         storage.set_last_machine(user_id, machine_enum.value)
-        storage.log_message(user_id, "bot", kind="machine_setup_fallback" if ai_fallback else "machine_setup")
+        storage.log_message(user_id, "bot", kind="machine_setup_fallback" if ai_error else "machine_setup")
         return AssistantReply(
-            kind="machine_setup", reply=narration, machine=machine, facts=facts, ai_fallback=ai_fallback
+            kind="machine_setup",
+            reply=narration,
+            machine=machine,
+            facts=facts,
+            ai_fallback=ai_error is not None,
+            ai_error=ai_error,
         )
 
     if len(matches) > 1:
@@ -573,10 +583,12 @@ def setup_machine(
     resolution = resolver(profile, injuries, leg_press_extras)
 
     facts = _extract_facts(resolution, machine_enum.value)
-    narration, ai_fallback = _narrate(user_id, machine, facts)
+    narration, ai_error = _narrate(user_id, machine, facts)
     storage.set_last_machine(user_id, machine_enum.value)
 
-    return SetupResponse(machine=machine_enum.value, facts=facts, narration=narration, ai_fallback=ai_fallback)
+    return SetupResponse(
+        machine=machine_enum.value, facts=facts, narration=narration, ai_fallback=ai_error is not None
+    )
 
 
 @app.post("/chat/{user_id}")

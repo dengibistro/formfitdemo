@@ -86,7 +86,8 @@ def test_free_chat_returns_json_503(monkeypatch, short_timeout, stub_storage, be
     monkeypatch.setattr(gemini, "_get_client", lambda: _Client(behaviour))
     response = TestClient(api.app).post("/assistant/tester", json={"message": "what should I eat today?"})
     assert response.status_code == 503
-    assert "AI trainer" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert "AI trainer" in detail and "tap a machine" in detail and "(error: " in detail
 
 
 @pytest.mark.parametrize("behaviour", [_hang, _explode])
@@ -98,6 +99,7 @@ def test_machine_setup_still_works_without_gemini(monkeypatch, short_timeout, st
     assert response.status_code == 200
     body = response.json()
     assert body["kind"] == "machine_setup" and body["ai_fallback"] is True
+    assert body["ai_error"] in ("timeout", "ConnectionError")
     seat = next(f for f in body["facts"] if f["axis_name"] == "Seat height")
     assert f"WHY: Set the seat height to pin {seat['achieved_pin']}." in body["reply"]
     assert COACHING["chest_press"].tips[0] in body["reply"]  # library text, verbatim
@@ -113,3 +115,30 @@ def test_normal_setup_is_not_flagged(monkeypatch, short_timeout, stub_storage):
     body = TestClient(api.app).post("/assistant/tester", json={"message": "chest press"}).json()
     assert body["ai_fallback"] is False
     assert body["reply"].startswith("WHY: Pin 2 lines your shoulders up.")
+
+
+def test_stale_conversation_pointer_starts_fresh(monkeypatch, short_timeout, stub_storage):
+    """A saved previous_interaction_id from an old model (or an expired one)
+    must not break every message: retry once without it."""
+
+    class _Done:
+        status = "completed"
+        id = "fresh-1"
+        output_text = "Sure, happy to help."
+
+    calls = []
+
+    class _StrictInteractions:
+        def create(self, **kwargs):
+            calls.append("previous_interaction_id" in kwargs)
+            if "previous_interaction_id" in kwargs:
+                raise ValueError("unknown previous interaction")
+            return _Done()
+
+    class _StrictClient:
+        interactions = _StrictInteractions()
+
+    monkeypatch.setattr(gemini.storage, "get_last_interaction_id", lambda user_id: "old-model-interaction")
+    monkeypatch.setattr(gemini, "_get_client", lambda: _StrictClient())
+    assert gemini.chat("tester", "hi") == "Sure, happy to help."
+    assert calls == [True, False]  # tried the old chain, then a fresh one

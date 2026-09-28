@@ -30,9 +30,11 @@ call to Google).
 """
 
 import concurrent.futures
+import logging
 import os
 
 from google import genai
+from google.genai import types
 
 import storage
 from machines.coaching import Coaching
@@ -72,11 +74,25 @@ MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
 # Error" came back (2026-09-28).
 GEMINI_TIMEOUT_SECONDS = 20
 
+# The SDK retries failed calls by default (3 times, backing off up to a
+# minute), which turned rate-limit or overload errors into a silent 20s
+# timeout: the real error never surfaced. One quick retry keeps a blip from
+# failing the call and leaves room for the actual error to come back.
+_RETRY_OPTIONS = types.HttpRetryOptions(attempts=1, initial_delay=1.0, max_delay=2.0)
+
+# Errors go to stderr, which Render shows under the service's Logs tab.
+log = logging.getLogger("formfit.gemini")
+
 
 class GeminiUnavailableError(Exception):
     """The Gemini call timed out or failed. The message is safe to show to
-    the user; api.py turns it into a 503 the chat already knows how to
-    display, instead of a raw 500 the frontend can't parse."""
+    the user; `code` is a short label for what failed ("timeout", "429"),
+    shown alongside it so testers can report it. api.py falls back to an
+    LLM-free setup card, or a 503 for free chat."""
+
+    def __init__(self, message: str, code: str):
+        super().__init__(message)
+        self.code = code
 
 
 _client: genai.Client | None = None
@@ -88,8 +104,15 @@ def _get_client() -> genai.Client:
     from the environment automatically."""
     global _client
     if _client is None:
-        _client = genai.Client()
+        _client = genai.Client(http_options=types.HttpOptions(retry_options=_RETRY_OPTIONS))
     return _client
+
+
+def _error_code(error: BaseException) -> str | None:
+    """A short code for the user-facing message ("429", "Timeout"), so a
+    tester can pass on what failed without digging through server logs."""
+    code = getattr(error, "code", None) or getattr(error, "status_code", None)
+    return str(code) if code else type(error).__name__
 
 
 def _call_gemini(user_id: str, user_text: str) -> str:
@@ -100,16 +123,29 @@ def _call_gemini(user_id: str, user_text: str) -> str:
     if last_interaction_id is not None:
         chain_kwargs["previous_interaction_id"] = last_interaction_id
 
-    def _create():
+    def _create_once(chain: dict):
         interaction = _get_client().interactions.create(
             model=MODEL,
             input=user_text,
             system_instruction=SYSTEM_PROMPT,
-            **chain_kwargs,
+            **chain,
         )
         if interaction.status != "completed":
             raise RuntimeError(f"Gemini interaction did not complete: status={interaction.status!r}")
         return interaction
+
+    def _create():
+        try:
+            return _create_once(chain_kwargs)
+        except Exception:
+            if not chain_kwargs:
+                raise
+            # The saved pointer can outlive what the server will continue
+            # from: it may have expired, or belong to a model we've since
+            # switched away from. Start a fresh conversation rather than
+            # failing every message for this user.
+            log.warning("Gemini rejected previous_interaction_id for %s; retrying without it", user_id, exc_info=True)
+            return _create_once({})
 
     # The call runs in its own thread so the wait can be bounded. On timeout
     # the thread is abandoned, not killed (Python can't), and finishes in the
@@ -120,11 +156,11 @@ def _call_gemini(user_id: str, user_text: str) -> str:
         try:
             interaction = future.result(timeout=GEMINI_TIMEOUT_SECONDS)
         except concurrent.futures.TimeoutError as e:
-            raise GeminiUnavailableError(
-                "The AI trainer is taking too long to answer. Try again in a minute."
-            ) from e
+            log.error("Gemini call timed out after %ss (model=%s)", GEMINI_TIMEOUT_SECONDS, MODEL)
+            raise GeminiUnavailableError("The AI trainer is taking too long to answer.", code="timeout") from e
         except Exception as e:
-            raise GeminiUnavailableError("Couldn't reach the AI trainer right now. Try again in a minute.") from e
+            log.exception("Gemini call failed (model=%s)", MODEL)
+            raise GeminiUnavailableError("Couldn't reach the AI trainer right now.", code=_error_code(e)) from e
     finally:
         pool.shutdown(wait=False)
 

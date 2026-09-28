@@ -707,7 +707,7 @@ function logChatMessage(userId, entry) {
 function replayChatHistory(history) {
   for (const entry of history) {
     if (entry.type === "setup") {
-      appendMachineSetupMessage(entry.machine, entry.facts, entry.text, entry.aiFallback);
+      appendMachineSetupMessage(entry.machine, entry.facts, entry.text, entry.aiFallback, entry.aiError);
     } else {
       appendMessage(entry.role, entry.text);
     }
@@ -825,7 +825,7 @@ function parseNarration(text) {
   return { why: why[1].trim(), tips: splitItems(tips), avoid: splitItems(avoid) };
 }
 
-function appendMachineSetupMessage(machine, facts, narrationText, aiFallback = false) {
+function appendMachineSetupMessage(machine, facts, narrationText, aiFallback = false, aiError = null) {
   const wrap = document.createElement("div");
   wrap.className = "chat-bubble-setup";
 
@@ -903,7 +903,10 @@ function appendMachineSetupMessage(machine, facts, narrationText, aiFallback = f
   if (aiFallback) {
     const note = document.createElement("div");
     note.className = "setup-ai-note";
-    note.textContent = "⚠️ The AI trainer is offline right now, so this is the basic setup straight from our engine. The pins and tips are still exact.";
+    note.textContent =
+      "⚠️ The AI trainer is offline right now, so this is the basic setup straight from our engine. " +
+      "The pins and tips are still exact." +
+      (aiError ? ` (error: ${aiError})` : "");
     body.appendChild(note);
   }
 
@@ -1025,13 +1028,14 @@ async function sendMessage(text) {
       appendMessage("bot", body.reply);
       appendRescanButton();
     } else if (body.kind === "machine_setup") {
-      appendMachineSetupMessage(body.machine, body.facts, body.reply, body.ai_fallback);
+      appendMachineSetupMessage(body.machine, body.facts, body.reply, body.ai_fallback, body.ai_error);
       logChatMessage(currentUserId, {
         type: "setup",
         machine: body.machine,
         facts: body.facts,
         text: body.reply,
         aiFallback: body.ai_fallback,
+        aiError: body.ai_error,
       });
       attachFeedbackUI(body.machine);
     } else {
